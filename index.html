@@ -11,114 +11,116 @@
 </head>
 <body>
 
-    <!-- LOGIN PAGE -->
-<div id="loginPage" class="login-page">
-    <div class="login-left">
-        <div class="login-left-content">
-            <div class="login-logo-box">
-                <i class="fas fa-mug-hot"></i>
+    <!-- ========== LOGIN PAGE (FANCELL STYLE) ========== -->
+    <div id="loginPage" class="login-page">
+        <div class="login-left">
+            <div class="login-left-content">
+                <div class="login-logo-box">
+                    <i class="fas fa-mug-hot"></i>
+                </div>
+                <h1 class="login-brand">MASUSPACE</h1>
+                <p class="login-tagline">Coffee Shop Management System</p>
+                <p class="login-desc">Sistem kasir lengkap untuk manajemen coffee shop modern</p>
+                
+                <div class="login-features">
+                    <div class="feature-item">
+                        <i class="fas fa-cash-register"></i>
+                        <span>Point of Sale (POS)</span>
+                    </div>
+                    <div class="feature-item">
+                        <i class="fas fa-chart-line"></i>
+                        <span>Laporan & Analitik</span>
+                    </div>
+                    <div class="feature-item">
+                        <i class="fas fa-boxes-stacked"></i>
+                        <span>Inventory Management</span>
+                    </div>
+                    <div class="feature-item">
+                        <i class="fas fa-handshake"></i>
+                        <span>Pengelolaan Investor</span>
+                    </div>
+                    <div class="feature-item">
+                        <i class="fas fa-wallet"></i>
+                        <span>Kas & Akuntansi</span>
+                    </div>
+                </div>
+                
+                <div class="login-footer-left">
+                    MASUSPACE POS — Design & Develop by MasuSpace Team
+                </div>
             </div>
-            <h1 class="login-brand">MASUSPACE</h1>
-            <p class="login-tagline">Coffee Shop Management System</p>
-            <p class="login-desc">Sistem kasir lengkap untuk manajemen coffee shop modern</p>
-            
-            <div class="login-features">
-                <div class="feature-item">
-                    <i class="fas fa-cash-register"></i>
-                    <span>Point of Sale (POS)</span>
+        </div>
+        
+        <div class="login-right">
+            <div class="login-form-container">
+                <div class="login-form-header">
+                    <h2>Masuk</h2>
+                    <p>Gunakan akun yang terdaftar di sistem.</p>
                 </div>
-                <div class="feature-item">
-                    <i class="fas fa-chart-line"></i>
-                    <span>Laporan & Analitik</span>
+                
+                <form class="login-form" id="loginForm">
+                    <div class="form-group">
+                        <label>Username</label>
+                        <div class="select-wrapper">
+                            <i class="fas fa-user"></i>
+                            <select id="loginUsername" required>
+                                <option value="">— pilih user —</option>
+                            </select>
+                            <i class="fas fa-chevron-down select-arrow"></i>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Password</label>
+                        <div class="password-wrapper">
+                            <input type="password" id="loginPassword" placeholder="Masukkan password" required>
+                            <button type="button" class="password-toggle" onclick="window.togglePassword()">
+                                <i class="fas fa-eye" id="passwordIcon"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Role</label>
+                        <div class="select-wrapper">
+                            <i class="fas fa-user-tag"></i>
+                            <select id="loginRole" required>
+                                <option value="">— pilih role —</option>
+                                <option value="owner">Owner</option>
+                                <option value="kasir">Kasir</option>
+                            </select>
+                            <i class="fas fa-chevron-down select-arrow"></i>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="login-submit-btn" id="loginBtn">
+                        <i class="fas fa-lock"></i>
+                        <span>Masuk</span>
+                    </button>
+                </form>
+                
+                <div class="login-hint-box">
+                    <p><strong>Demo Account:</strong></p>
+                    <div class="demo-accounts">
+                        <div class="demo-row">
+                            <span class="demo-label">Owner:</span>
+                            <code>owner</code> / <code>1234</code>
+                        </div>
+                        <div class="demo-row">
+                            <span class="demo-label">Kasir:</span>
+                            <code>kasir1</code> / <code>1234</code>
+                        </div>
+                    </div>
                 </div>
-                <div class="feature-item">
-                    <i class="fas fa-boxes-stacked"></i>
-                    <span>Inventory Management</span>
+                
+                <div class="login-footer-right">
+                    Design & Develop by MasuSpace Team
                 </div>
-                <div class="feature-item">
-                    <i class="fas fa-handshake"></i>
-                    <span>Pengelolaan Investor</span>
-                </div>
-                <div class="feature-item">
-                    <i class="fas fa-wallet"></i>
-                    <span>Kas & Akuntansi</span>
-                </div>
-            </div>
-            
-            <div class="login-footer-left">
-                MASUSPACE POS — Design & Develop by MasuSpace Team
             </div>
         </div>
     </div>
-    
-    <div class="login-right">
-        <div class="login-form-container">
-            <div class="login-form-header">
-                <h2>Masuk</h2>
-                <p>Gunakan akun yang terdaftar di sistem.</p>
-            </div>
-            
-            <form class="login-form" id="loginForm" onsubmit="return window.handleLogin(event)">
-                <div class="form-group">
-                    <label>Username</label>
-                    <div class="select-wrapper">
-                        <i class="fas fa-user"></i>
-                        <select id="loginUsername" required>
-                            <option value="">— pilih user —</option>
-                        </select>
-                        <i class="fas fa-chevron-down select-arrow"></i>
-                    </div>
-                </div>
-                
-                <div class="form-group">
-                    <label>Password</label>
-                    <div class="password-wrapper">
-                        <input type="password" id="loginPassword" placeholder="Masukkan password" required>
-                        <button type="button" class="password-toggle" onclick="window.togglePassword()">
-                            <i class="fas fa-eye" id="passwordIcon"></i>
-                        </button>
-                    </div>
-                </div>
-                
-                <div class="form-group">
-                    <label>Role</label>
-                    <div class="select-wrapper">
-                        <i class="fas fa-user-tag"></i>
-                        <select id="loginRole" required>
-                            <option value="">— pilih role —</option>
-                            <option value="owner">Owner</option>
-                            <option value="kasir">Kasir</option>
-                        </select>
-                        <i class="fas fa-chevron-down select-arrow"></i>
-                    </div>
-                </div>
-                
-                <button type="submit" class="login-submit-btn">
-                    <i class="fas fa-lock"></i>
-                    <span>Masuk</span>
-                </button>
-            </form>
-            
-            <div class="login-hint-box">
-                <p><strong>Demo Account:</strong></p>
-                <div class="demo-accounts">
-                    <div class="demo-row">
-                        <span class="demo-label">Owner:</span>
-                        <code>owner</code> / <code>1234</code>
-                    </div>
-                    <div class="demo-row">
-                        <span class="demo-label">Kasir:</span>
-                        <code>kasir1</code> / <code>1234</code>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="login-footer-right">
-                Design & Develop by MasuSpace Team
-            </div>
-        </div>
-    </div>
-</div>
+
+    <!-- ========== MAIN APP ========== -->
     <div id="mainApp" class="main-app" style="display:none;">
         <!-- Sidebar -->
         <aside class="sidebar" id="sidebar">
@@ -201,7 +203,6 @@
                             <div class="stat-info">
                                 <div class="stat-label">Order Hari Ini</div>
                                 <div class="stat-value" id="statOrders">0</div>
-                                <div class="stat-change" id="statOrdersChange">+0%</div>
                             </div>
                         </div>
                         <div class="stat-card animate-in">
@@ -209,7 +210,6 @@
                             <div class="stat-info">
                                 <div class="stat-label">Pendapatan</div>
                                 <div class="stat-value" id="statRevenue">Rp 0</div>
-                                <div class="stat-change" id="statRevenueChange">+0%</div>
                             </div>
                         </div>
                         <div class="stat-card animate-in">
@@ -230,11 +230,11 @@
                     <div class="dashboard-grid">
                         <div class="dash-card animate-in">
                             <h3><i class="fas fa-chart-pie"></i> Pembayaran Hari Ini</h3>
-                            <div id="dashPaymentMethods" class="payment-breakdown"></div>
+                            <div id="dashPaymentMethods"></div>
                         </div>
                         <div class="dash-card animate-in">
                             <h3><i class="fas fa-trophy"></i> Produk Terlaris</h3>
-                            <div id="dashTopProducts" class="top-products"></div>
+                            <div id="dashTopProducts"></div>
                         </div>
                     </div>
                 </div>
@@ -471,7 +471,8 @@
         </main>
     </div>
 
-    <!-- MODALS -->
+    <!-- ========== MODALS ========== -->
+    
     <!-- Product Modal -->
     <div class="modal-overlay" id="productModal">
         <div class="modal">
@@ -548,7 +549,7 @@
         </div>
     </div>
 
-    <!-- Daily Report Modal (Kasir) -->
+    <!-- Daily Report Modal -->
     <div class="modal-overlay" id="dailyReportModal">
         <div class="modal report-modal">
             <div class="modal-header"><h2>Laporan Hari Ini</h2><button class="modal-close" onclick="window.closeModal('dailyReportModal')"><i class="fas fa-times"></i></button></div>
