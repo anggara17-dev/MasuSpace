@@ -12,51 +12,113 @@
 <body>
 
     <!-- LOGIN PAGE -->
-    <div id="loginPage" class="login-page">
-        <div class="login-bg-animation">
-            <div class="circle c1"></div>
-            <div class="circle c2"></div>
-            <div class="circle c3"></div>
-        </div>
-        <div class="login-container">
-            <div class="login-card">
-                <div class="login-header">
-                    <div class="logo-icon"><i class="fas fa-mug-hot"></i></div>
-                    <h1>MasuSpace</h1>
-                    <p>Coffee Shop Management System</p>
+<div id="loginPage" class="login-page">
+    <div class="login-left">
+        <div class="login-left-content">
+            <div class="login-logo-box">
+                <i class="fas fa-mug-hot"></i>
+            </div>
+            <h1 class="login-brand">MASUSPACE</h1>
+            <p class="login-tagline">Coffee Shop Management System</p>
+            <p class="login-desc">Sistem kasir lengkap untuk manajemen coffee shop modern</p>
+            
+            <div class="login-features">
+                <div class="feature-item">
+                    <i class="fas fa-cash-register"></i>
+                    <span>Point of Sale (POS)</span>
                 </div>
-                <form class="login-form" onsubmit="return window.handleLogin(event)">
-                    <div class="form-group">
-                        <label><i class="fas fa-user"></i> Username</label>
-                        <input type="text" id="loginUsername" placeholder="Masukkan username" required autocomplete="off">
-                    </div>
-                    <div class="form-group">
-                        <label><i class="fas fa-lock"></i> Password</label>
-                        <input type="password" id="loginPassword" placeholder="Masukkan password" required>
-                    </div>
-                    <div class="form-group">
-                        <label><i class="fas fa-user-tag"></i> Role</label>
-                        <select id="loginRole" required>
-                            <option value="">Pilih Role</option>
-                            <option value="owner">Owner</option>
-                            <option value="kasir">Kasir</option>
-                        </select>
-                    </div>
-                    <button type="submit" class="login-btn">
-                        <span>Masuk</span>
-                        <i class="fas fa-arrow-right"></i>
-                    </button>
-                </form>
-                <div class="login-hint">
-                    <p><strong>Demo Account:</strong></p>
-                    <p>Owner: <code>owner</code> / <code>1234</code></p>
-                    <p>Kasir: <code>kasir1</code> / <code>1234</code></p>
+                <div class="feature-item">
+                    <i class="fas fa-chart-line"></i>
+                    <span>Laporan & Analitik</span>
                 </div>
+                <div class="feature-item">
+                    <i class="fas fa-boxes-stacked"></i>
+                    <span>Inventory Management</span>
+                </div>
+                <div class="feature-item">
+                    <i class="fas fa-handshake"></i>
+                    <span>Pengelolaan Investor</span>
+                </div>
+                <div class="feature-item">
+                    <i class="fas fa-wallet"></i>
+                    <span>Kas & Akuntansi</span>
+                </div>
+            </div>
+            
+            <div class="login-footer-left">
+                MASUSPACE POS — Design & Develop by MasuSpace Team
             </div>
         </div>
     </div>
-
-    <!-- MAIN APP -->
+    
+    <div class="login-right">
+        <div class="login-form-container">
+            <div class="login-form-header">
+                <h2>Masuk</h2>
+                <p>Gunakan akun yang terdaftar di sistem.</p>
+            </div>
+            
+            <form class="login-form" id="loginForm" onsubmit="return window.handleLogin(event)">
+                <div class="form-group">
+                    <label>Username</label>
+                    <div class="select-wrapper">
+                        <i class="fas fa-user"></i>
+                        <select id="loginUsername" required>
+                            <option value="">— pilih user —</option>
+                        </select>
+                        <i class="fas fa-chevron-down select-arrow"></i>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>Password</label>
+                    <div class="password-wrapper">
+                        <input type="password" id="loginPassword" placeholder="Masukkan password" required>
+                        <button type="button" class="password-toggle" onclick="window.togglePassword()">
+                            <i class="fas fa-eye" id="passwordIcon"></i>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label>Role</label>
+                    <div class="select-wrapper">
+                        <i class="fas fa-user-tag"></i>
+                        <select id="loginRole" required>
+                            <option value="">— pilih role —</option>
+                            <option value="owner">Owner</option>
+                            <option value="kasir">Kasir</option>
+                        </select>
+                        <i class="fas fa-chevron-down select-arrow"></i>
+                    </div>
+                </div>
+                
+                <button type="submit" class="login-submit-btn">
+                    <i class="fas fa-lock"></i>
+                    <span>Masuk</span>
+                </button>
+            </form>
+            
+            <div class="login-hint-box">
+                <p><strong>Demo Account:</strong></p>
+                <div class="demo-accounts">
+                    <div class="demo-row">
+                        <span class="demo-label">Owner:</span>
+                        <code>owner</code> / <code>1234</code>
+                    </div>
+                    <div class="demo-row">
+                        <span class="demo-label">Kasir:</span>
+                        <code>kasir1</code> / <code>1234</code>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="login-footer-right">
+                Design & Develop by MasuSpace Team
+            </div>
+        </div>
+    </div>
+</div>
     <div id="mainApp" class="main-app" style="display:none;">
         <!-- Sidebar -->
         <aside class="sidebar" id="sidebar">
