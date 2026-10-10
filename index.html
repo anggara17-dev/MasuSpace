@@ -5,21 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MasuSpace POS System</title>
     <link rel="stylesheet" href="style.css">
-    <!-- Supabase JS -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <!-- Font Awesome untuk Icon -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
 <body>
 
-    <!-- Header -->
     <header class="header">
         <div class="header-left">
-            <div class="logo">
-                <i class="fas fa-cube"></i> MASU<br>SPACE
-            </div>
+            <div class="logo"><i class="fas fa-cube"></i> MASU<br>SPACE</div>
             <div class="date-display" id="currentDate">Loading...</div>
         </div>
         <div class="header-right">
@@ -34,28 +28,19 @@
         </div>
     </header>
 
-    <!-- Main Content -->
     <div class="main-container">
-        
-        <!-- Left Panel: Products -->
         <div class="left-panel">
             <div class="search-bar">
                 <i class="fas fa-search"></i>
                 <input type="text" placeholder="Search menu..." id="searchInput">
                 <button class="filter-btn"><i class="fas fa-sliders-h"></i></button>
             </div>
-
-            <div class="categories" id="categoriesContainer">
-                <!-- Categories injected by JS -->
-            </div>
-
+            <div class="categories" id="categoriesContainer"></div>
             <div class="products-grid" id="productsGrid">
-                <!-- Products injected by JS -->
                 <div class="loading">Loading products...</div>
             </div>
         </div>
 
-        <!-- Right Panel: Cart/Order -->
         <div class="right-panel">
             <div class="order-header">
                 <div class="order-title">
@@ -63,12 +48,10 @@
                     <p id="orderNumber">#NEW ORDER</p>
                 </div>
             </div>
-
             <div class="order-type-toggle">
                 <button class="type-btn active" onclick="setOrderType('dine_in', this)">Dine In</button>
                 <button class="type-btn" onclick="setOrderType('takeaway', this)">Take Away</button>
             </div>
-
             <div class="customer-info">
                 <div class="input-group">
                     <label>Customer Name</label>
@@ -79,30 +62,15 @@
                     <input type="text" id="tableNumber" placeholder="Table 1">
                 </div>
             </div>
-
             <div class="order-list-header">Order List</div>
             <div class="order-list" id="orderList">
-                <div class="empty-order">
-                    <i class="fas fa-shopping-basket"></i>
-                    <p>No items yet</p>
-                </div>
+                <div class="empty-order"><i class="fas fa-shopping-basket"></i><p>No items yet</p></div>
             </div>
-
             <div class="payment-details">
-                <div class="payment-row">
-                    <span>Subtotal</span>
-                    <span id="subtotal">Rp 0</span>
-                </div>
-                <div class="payment-row">
-                    <span>Tax (10%)</span>
-                    <span id="tax">Rp 0</span>
-                </div>
-                <div class="payment-row total">
-                    <span>Total</span>
-                    <span id="total">Rp 0</span>
-                </div>
+                <div class="payment-row"><span>Subtotal</span><span id="subtotal">Rp 0</span></div>
+                <div class="payment-row"><span>Tax (10%)</span><span id="tax">Rp 0</span></div>
+                <div class="payment-row total"><span>Total</span><span id="total">Rp 0</span></div>
             </div>
-
             <button class="place-order-btn" id="placeOrderBtn" onclick="processCheckout()" disabled>
                 <span>Place Order</span>
                 <span id="btnTotal">Rp 0</span>
@@ -111,56 +79,41 @@
         </div>
     </div>
 
-    <!-- Toast Notification -->
     <div class="toast" id="toast">Notification</div>
 
-    <script src="app.js"></script>
-
-    <!-- Modal Produk -->
-<div class="modal-overlay" id="productModal">
-    <div class="modal">
-        <div class="modal-header">
-            <h2 id="modalProductName">Product Name</h2>
-            <button class="modal-close" onclick="closeModal()"><i class="fas fa-times"></i></button>
+    <!-- Modal Produk (Dipastikan ada sebelum script dipanggil) -->
+    <div class="modal-overlay" id="productModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 id="modalProductName">Product Name</h2>
+                <button class="modal-close" onclick="closeModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="variant-section">
+                <h4><i class="fas fa-temperature-half"></i> Suhu</h4>
+                <div class="variant-options" id="suhuVariants"></div>
+            </div>
+            <div class="variant-section">
+                <h4><i class="fas fa-cup-togo"></i> Ukuran</h4>
+                <div class="variant-options" id="ukuranVariants"></div>
+            </div>
+            <div class="variant-section">
+                <h4><i class="fas fa-plus-circle"></i> Add-ons</h4>
+                <div id="addonsList"></div>
+            </div>
+            <div class="variant-section">
+                <h4><i class="fas fa-note-sticky"></i> Catatan</h4>
+                <textarea class="notes-input" id="modalNotes" placeholder="Less sugar, extra hot, dll..."></textarea>
+            </div>
+            <div class="qty-selector">
+                <button onclick="changeModalQty(-1)"><i class="fas fa-minus"></i></button>
+                <span id="modalQty">1</span>
+                <button onclick="changeModalQty(1)"><i class="fas fa-plus"></i></button>
+            </div>
+            <button class="add-to-cart-btn" onclick="addToCartFromModal()">Add to Order - <span id="modalTotal">Rp 0</span></button>
         </div>
-
-        <!-- Varian Suhu -->
-        <div class="variant-section">
-            <h4><i class="fas fa-temperature-half"></i> Suhu</h4>
-            <div class="variant-options" id="suhuVariants"></div>
-        </div>
-
-        <!-- Varian Ukuran -->
-        <div class="variant-section">
-            <h4><i class="fas fa-cup-togo"></i> Ukuran</h4>
-            <div class="variant-options" id="ukuranVariants"></div>
-        </div>
-
-        <!-- Add-ons -->
-        <div class="variant-section">
-            <h4><i class="fas fa-plus-circle"></i> Add-ons</h4>
-            <div id="addonsList"></div>
-        </div>
-
-        <!-- Catatan -->
-        <div class="variant-section">
-            <h4><i class="fas fa-note-sticky"></i> Catatan</h4>
-            <textarea class="notes-input" id="modalNotes" placeholder="Less sugar, extra hot, dll..."></textarea>
-        </div>
-
-        <!-- Quantity -->
-        <div class="qty-selector">
-            <button onclick="changeModalQty(-1)"><i class="fas fa-minus"></i></button>
-            <span id="modalQty">1</span>
-            <button onclick="changeModalQty(1)"><i class="fas fa-plus"></i></button>
-        </div>
-
-        <!-- Add to Cart -->
-        <button class="add-to-cart-btn" onclick="addToCartFromModal()">
-            Add to Order - <span id="modalTotal">Rp 0</span>
-        </button>
     </div>
-</div>
     
+    <!-- Script dipanggil PALING AKHIR -->
+    <script src="app.js"></script>
 </body>
 </html>
