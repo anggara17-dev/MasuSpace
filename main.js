@@ -23,7 +23,8 @@
         cashReceived: 0,
         discount: { type: 'percent', value: 0 },
         orderType: 'dine_in',
-        currentReceipt: null
+        currentReceipt: null,
+        kasirExpenses: []
     };
 
     // ========== UTILITIES ==========
@@ -266,9 +267,9 @@
             document.getElementById('statLowStock').innerText = (inv.data?.low_stock || 0) + (inv.data?.out_of_stock || 0);
 
             const pbHtml = `
-                <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)"><span><i class="fas fa-money-bill-wave" style="color:#10b981;margin-right:8px"></i>Cash</span><b>${formatRp(r.cash_sales||0)}</b></div>
-                <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)"><span><i class="fas fa-qrcode" style="color:#3b82f6;margin-right:8px"></i>QRIS</span><b>${formatRp(r.qris_sales||0)}</b></div>
-                <div style="display:flex;justify-content:space-between;padding:10px 0"><span><i class="fas fa-credit-card" style="color:#f59e0b;margin-right:8px"></i>Debit</span><b>${formatRp(r.debit_sales||0)}</b></div>
+                <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)"><span><i class="fas fa-money-bill-wave" style="color:var(--primary);margin-right:8px"></i>Cash</span><b>${formatRp(r.cash_sales||0)}</b></div>
+                <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)"><span><i class="fas fa-qrcode" style="color:var(--primary);margin-right:8px"></i>QRIS</span><b>${formatRp(r.qris_sales||0)}</b></div>
+                <div style="display:flex;justify-content:space-between;padding:10px 0"><span><i class="fas fa-credit-card" style="color:var(--primary);margin-right:8px"></i>Debit</span><b>${formatRp(r.debit_sales||0)}</b></div>
             `;
             document.getElementById('dashPaymentMethods').innerHTML = pbHtml;
 
@@ -297,7 +298,8 @@
         }
         renderCategories();
         renderProducts();
-        loadQuickExpenseSources();
+        await loadQuickExpenseSources();
+        await loadKasirExpenses();
     }
 
     async function loadQuickExpenseSources() {
@@ -306,6 +308,23 @@
         const select = document.getElementById('quickExpenseSource');
         if (select) {
             select.innerHTML = '<option value="">Sumber Kas</option>' + sources.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+        }
+    }
+
+    async function loadKasirExpenses() {
+        const today = getTodayJakarta();
+        const { data } = await supabase.from('expenses').select('*, cash_sources(name)').gte('created_at', today + 'T00:00:00').order('created_at', { ascending: false });
+        state.kasirExpenses = data || [];
+        const container = document.getElementById('kasirExpenseHistory');
+        if (state.kasirExpenses.length === 0) {
+            container.innerHTML = '<div class="empty-history">Belum ada pengeluaran</div>';
+        } else {
+            container.innerHTML = state.kasirExpenses.map(e => `
+                <div class="expense-history-item">
+                    <span class="exp-cat">${e.category}</span>
+                    <span class="exp-amount">-${formatRp(e.amount)}</span>
+                </div>
+            `).join('');
         }
     }
 
@@ -319,11 +338,12 @@
         if (error || !data?.success) { showToast('Gagal', true); return; }
         showToast('Pengeluaran dicatat!');
         document.getElementById('quickExpenseAmount').value = '';
+        await loadKasirExpenses();
     };
 
     function renderCategories() {
         const c = document.getElementById('categoriesContainer');
-        let h = `<div class="category-card active" onclick="window.selectCat(null, this)"><h4>🍽️ Semua</h4></div>`;
+        let h = `<div class="category-card active" onclick="window.selectCat(null, this)"><h4>️ Semua</h4></div>`;
         state.categories.forEach(cat => {
             h += `<div class="category-card" onclick="window.selectCat('${cat.id}', this)"><h4>${cat.icon || ''} ${cat.name}</h4></div>`;
         });
@@ -378,7 +398,7 @@
     function renderVariants() {
         document.getElementById('suhuVariants').innerHTML = `
             <div class="variant-option ${state.modalVariant.suhu === 'Hot' ? 'selected' : ''}" onclick="window.selVar('suhu','Hot')">☕ Hot</div>
-            <div class="variant-option ${state.modalVariant.suhu === 'Iced' ? 'selected' : ''}" onclick="window.selVar('suhu','Iced')"> Iced (+2K)</div>`;
+            <div class="variant-option ${state.modalVariant.suhu === 'Iced' ? 'selected' : ''}" onclick="window.selVar('suhu','Iced')">🧊 Iced (+2K)</div>`;
         document.getElementById('ukuranVariants').innerHTML = `
             <div class="variant-option ${state.modalVariant.ukuran === 'Regular' ? 'selected' : ''}" onclick="window.selVar('ukuran','Regular')">Regular</div>
             <div class="variant-option ${state.modalVariant.ukuran === 'Large' ? 'selected' : ''}" onclick="window.selVar('ukuran','Large')">Large (+5K)</div>`;
@@ -594,7 +614,7 @@
             return;
         }
         const btn = document.querySelector('.confirm-payment-btn');
-        btn.innerText = ' Memproses...'; btn.disabled = true;
+        btn.innerText = '⏳ Memproses...'; btn.disabled = true;
         try {
             const discAmt = calcDiscount(sub);
             const { data, error } = await supabase.rpc('checkout_order', {
@@ -634,7 +654,7 @@
         const sub = r.items.reduce((s, i) => s + i.unit_price * i.qty, 0);
         let html = `
             <div class="receipt-header">
-                <h3>☕ MASUSPACE</h3>
+                <h3> MASUSPACE</h3>
                 <p>Coffee Shop</p>
                 <p style="font-size:10px;margin-top:8px">${getJakartaDate()}</p>
                 <p style="font-size:10px">${r.order_number}</p>
@@ -655,7 +675,7 @@
             <div style="text-align:center;margin-top:12px;font-size:10px">
                 <p>━━━━━━━━━━━━━━━━━━━</p>
                 <p>Terima kasih!</p>
-                <p>Selamat menikmati ☕</p>
+                <p>Selamat menikmati </p>
             </div>
         `;
         document.getElementById('receiptContent').innerHTML = html;
@@ -863,7 +883,7 @@
                 <td><span class="badge badge-${badge}">${status}</span></td>
                 <td class="owner-only"><button class="btn-secondary" style="padding:6px 10px;font-size:11px" onclick="window.editIngredient('${i.id}')"><i class="fas fa-edit"></i></button></td>
             </tr>`;
-        }).join('') : '<tr><td colspan="9" style="text-align:center;padding:30px">Tidak ada data</td></tr>';
+        }).join('') : '<tr><td colspan="9" style="text-align:center;padding:30px">Belum ada data bahan baku. Klik "Tambah Bahan" untuk menambah.</td></tr>';
     }
     window.loadInventory = loadInventory;
 
@@ -920,7 +940,6 @@
             </div>
         `).join('');
 
-        // Mutasi kas dengan filter tanggal
         const start = document.getElementById('cashFilterStart')?.value;
         const end = document.getElementById('cashFilterEnd')?.value;
         let query = supabase.from('cash_mutations').select('*, cash_sources(name)').order('created_at', { ascending: false }).limit(50);
@@ -1030,27 +1049,26 @@
         await loadInvestors();
     };
 
-    window.calculateProfitSharing = async function() {
+    window.setProfitPeriod = function() {
         const period = document.getElementById('psPeriod').value;
-        let start = document.getElementById('psStart').value;
-        let end = document.getElementById('psEnd').value;
-        
         const today = getTodayJakarta();
         if (period === 'month') {
-            start = new Date().toISOString().slice(0,7) + '-01';
-            end = today;
+            const start = new Date().toISOString().slice(0,7) + '-01';
             document.getElementById('psStart').value = start;
-            document.getElementById('psEnd').value = end;
+            document.getElementById('psEnd').value = today;
         } else if (period === 'quarter') {
             const now = new Date();
             const quarter = Math.floor(now.getMonth() / 3);
             const startMonth = quarter * 3;
-            start = new Date(now.getFullYear(), startMonth, 1).toISOString().split('T')[0];
-            end = today;
+            const start = new Date(now.getFullYear(), startMonth, 1).toISOString().split('T')[0];
             document.getElementById('psStart').value = start;
-            document.getElementById('psEnd').value = end;
+            document.getElementById('psEnd').value = today;
         }
-        
+    };
+
+    window.calculateProfitSharing = async function() {
+        const start = document.getElementById('psStart').value;
+        const end = document.getElementById('psEnd').value;
         if (!start || !end) { showToast('Pilih tanggal!', true); return; }
         const { data, error } = await supabase.rpc('calculate_profit_sharing', { p_start: start, p_end: end });
         if (error) { showToast('Gagal: ' + error.message, true); return; }
