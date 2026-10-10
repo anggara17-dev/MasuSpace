@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MasuSpace POS System</title>
+    <title>MasuSpace POS - Coffee Shop System</title>
     <link rel="stylesheet" href="style.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -13,11 +13,13 @@
 
     <header class="header">
         <div class="header-left">
-            <div class="logo"><i class="fas fa-cube"></i> MASU<br>SPACE</div>
+            <div class="logo"><i class="fas fa-mug-hot"></i> MASU<br>SPACE</div>
             <div class="date-display" id="currentDate">Loading...</div>
         </div>
         <div class="header-right">
             <div class="header-stat">Today: <strong id="totalOrders">0 Orders</strong></div>
+            <div class="header-stat">Revenue: <strong id="todayRevenue">Rp 0</strong></div>
+            <button class="btn-report" onclick="window.showReport()"><i class="fas fa-chart-bar"></i> Report</button>
             <div class="user-profile">
                 <div class="user-avatar">MS</div>
                 <div class="user-info">
@@ -33,7 +35,6 @@
             <div class="search-bar">
                 <i class="fas fa-search"></i>
                 <input type="text" placeholder="Search menu..." id="searchInput">
-                <button class="filter-btn"><i class="fas fa-sliders-h"></i></button>
             </div>
             <div class="categories" id="categoriesContainer"></div>
             <div class="products-grid" id="productsGrid">
@@ -47,11 +48,14 @@
                     <h3>Current Order</h3>
                     <p id="orderNumber">#NEW ORDER</p>
                 </div>
+                <button class="btn-hold" onclick="window.showHoldOrders()" title="Hold Orders"><i class="fas fa-pause-circle"></i></button>
             </div>
+            
             <div class="order-type-toggle">
                 <button class="type-btn active" onclick="window.setOrderType('dine_in', this)">Dine In</button>
                 <button class="type-btn" onclick="window.setOrderType('takeaway', this)">Take Away</button>
             </div>
+            
             <div class="customer-info">
                 <div class="input-group">
                     <label>Customer Name</label>
@@ -62,25 +66,26 @@
                     <input type="text" id="tableNumber" placeholder="Table 1">
                 </div>
             </div>
+            
             <div class="order-list-header">Order List</div>
             <div class="order-list" id="orderList">
                 <div class="empty-order"><i class="fas fa-shopping-basket"></i><p>No items yet</p></div>
             </div>
+            
             <div class="payment-details">
                 <div class="payment-row"><span>Subtotal</span><span id="subtotal">Rp 0</span></div>
-                <div class="payment-row"><span>Tax (10%)</span><span id="tax">Rp 0</span></div>
                 <div class="payment-row total"><span>Total</span><span id="total">Rp 0</span></div>
             </div>
-            <button class="place-order-btn" id="placeOrderBtn" onclick="window.processCheckout()" disabled>
-                <span>Place Order</span>
+            
+            <button class="place-order-btn" id="placeOrderBtn" onclick="window.showPaymentModal()" disabled>
+                <span>Payment</span>
                 <span id="btnTotal">Rp 0</span>
                 <i class="fas fa-arrow-right"></i>
             </button>
         </div>
     </div>
 
-    <div class="toast" id="toast">Notification</div>
-
+    <!-- Product Modal -->
     <div class="modal-overlay" id="productModal">
         <div class="modal">
             <div class="modal-header">
@@ -92,7 +97,7 @@
                 <div class="variant-options" id="suhuVariants"></div>
             </div>
             <div class="variant-section">
-                <h4><i class="fas fa-cup-togo"></i> Ukuran</h4>
+                <h4><i class="fas fa-ruler"></i> Ukuran</h4>
                 <div class="variant-options" id="ukuranVariants"></div>
             </div>
             <div class="variant-section">
@@ -100,7 +105,7 @@
                 <div id="addonsList"></div>
             </div>
             <div class="variant-section">
-                <h4><i class="fas fa-note-sticky"></i> Catatan</h4>
+                <h4><i class="fas fa-sticky-note"></i> Catatan</h4>
                 <textarea class="notes-input" id="modalNotes" placeholder="Less sugar, extra hot, dll..."></textarea>
             </div>
             <div class="qty-selector">
@@ -111,7 +116,85 @@
             <button class="add-to-cart-btn" onclick="window.addToCart()">Add to Order - <span id="modalTotal">Rp 0</span></button>
         </div>
     </div>
-    
+
+    <!-- Payment Modal -->
+    <div class="modal-overlay" id="paymentModal">
+        <div class="modal payment-modal">
+            <div class="modal-header">
+                <h2>Payment</h2>
+                <button class="modal-close" onclick="window.closePaymentModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="payment-amount">
+                <div class="amount-label">Total Amount</div>
+                <div class="amount-value" id="paymentTotal">Rp 0</div>
+            </div>
+            <div class="payment-methods">
+                <button class="method-btn active" onclick="window.selectPaymentMethod('cash', this)"><i class="fas fa-money-bill-wave"></i> Cash</button>
+                <button class="method-btn" onclick="window.selectPaymentMethod('qris', this)"><i class="fas fa-qrcode"></i> QRIS</button>
+                <button class="method-btn" onclick="window.selectPaymentMethod('debit', this)"><i class="fas fa-credit-card"></i> Debit</button>
+            </div>
+            <div class="cash-input-section" id="cashInputSection">
+                <div class="input-group">
+                    <label>Uang Diterima</label>
+                    <input type="number" id="cashReceived" placeholder="0" oninput="window.calculateChange()">
+                </div>
+                <div class="quick-cash">
+                    <button onclick="window.setQuickCash(50000)">50K</button>
+                    <button onclick="window.setQuickCash(100000)">100K</button>
+                    <button onclick="window.setQuickCash(150000)">150K</button>
+                    <button onclick="window.setQuickCash(200000)">200K</button>
+                    <button onclick="window.setQuickCash(500000)">500K</button>
+                    <button onclick="window.setExactCash()">Uang Pas</button>
+                </div>
+                <div class="change-display">
+                    <div class="change-label">Kembalian</div>
+                    <div class="change-value" id="changeAmount">Rp 0</div>
+                </div>
+            </div>
+            <button class="confirm-payment-btn" onclick="window.processPayment()">Confirm Payment</button>
+        </div>
+    </div>
+
+    <!-- Hold Orders Modal -->
+    <div class="modal-overlay" id="holdModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>Hold Orders</h2>
+                <button class="modal-close" onclick="window.closeHoldModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="hold-list" id="holdList">
+                <div class="empty-hold">No held orders</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Report Modal -->
+    <div class="modal-overlay" id="reportModal">
+        <div class="modal report-modal">
+            <div class="modal-header">
+                <h2>Daily Report</h2>
+                <button class="modal-close" onclick="window.closeReportModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="report-content" id="reportContent">
+                <div class="loading">Loading report...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Receipt Modal -->
+    <div class="modal-overlay" id="receiptModal">
+        <div class="modal receipt-modal">
+            <div class="modal-header">
+                <h2>Receipt</h2>
+                <button class="modal-close" onclick="window.closeReceiptModal()"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="receipt-content" id="receiptContent"></div>
+            <button class="print-btn" onclick="window.printReceipt()"><i class="fas fa-print"></i> Print Receipt</button>
+        </div>
+    </div>
+
+    <div class="toast" id="toast">Notification</div>
+
     <script src="main.js"></script>
 </body>
 </html>
