@@ -3,6 +3,8 @@
     --primary-dark: #059669;
     --primary-light: #d1fae5;
     --primary-50: #ecfdf5;
+    --brand: #1e3a5f;
+    --brand-dark: #152a45;
     --bg: #f8fafc;
     --card-bg: #ffffff;
     --text: #0f172a;
@@ -12,16 +14,14 @@
     --shadow: 0 1px 3px rgba(0,0,0,0.08);
     --shadow-lg: 0 10px 25px rgba(0,0,0,0.1);
     --sidebar-width: 260px;
-    --sidebar-collapsed: 0px;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Plus Jakarta Sans', sans-serif; }
 body { background: var(--bg); color: var(--text); height: 100vh; overflow: hidden; }
 
 /* ========== LOGIN PAGE (FANCELL STYLE) ========== */
-.login-page { position: fixed; inset: 0; display: flex; z-index: 9999; font-family: 'Plus Jakarta Sans', sans-serif; }
+.login-page { position: fixed; inset: 0; display: flex; z-index: 9999; }
 
-/* LEFT SIDE - Blue Branding */
 .login-left {
     flex: 1;
     background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 50%, #1e3a5f 100%);
@@ -126,7 +126,6 @@ body { background: var(--bg); color: var(--text); height: 100vh; overflow: hidde
     margin-top: auto;
 }
 
-/* RIGHT SIDE - Login Form */
 .login-right {
     width: 500px;
     background: #f8fafc;
@@ -184,7 +183,7 @@ body { background: var(--bg); color: var(--text); height: 100vh; overflow: hidde
     transition: 0.2s;
 }
 
-.select-wrapper select:focus { border-color: #1e3a5f; box-shadow: 0 0 0 3px rgba(30,58,95,0.1); }
+.select-wrapper select:focus { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(30,58,95,0.1); }
 
 .select-arrow {
     position: absolute;
@@ -211,7 +210,7 @@ body { background: var(--bg); color: var(--text); height: 100vh; overflow: hidde
     background: white;
 }
 
-.password-wrapper input:focus { border-color: #1e3a5f; box-shadow: 0 0 0 3px rgba(30,58,95,0.1); }
+.password-wrapper input:focus { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(30,58,95,0.1); }
 
 .password-toggle {
     position: absolute;
@@ -224,12 +223,12 @@ body { background: var(--bg); color: var(--text); height: 100vh; overflow: hidde
     font-size: 16px;
 }
 
-.password-toggle:hover { color: #1e3a5f; }
+.password-toggle:hover { color: var(--brand); }
 
 .login-submit-btn {
     width: 100%;
     padding: 16px;
-    background: #1e3a5f;
+    background: var(--brand);
     color: white;
     border: none;
     border-radius: 10px;
@@ -244,7 +243,8 @@ body { background: var(--bg); color: var(--text); height: 100vh; overflow: hidde
     margin-top: 8px;
 }
 
-.login-submit-btn:hover { background: #152a45; transform: translateY(-2px); box-shadow: 0 10px 20px rgba(30,58,95,0.2); }
+.login-submit-btn:hover { background: var(--brand-dark); transform: translateY(-2px); box-shadow: 0 10px 20px rgba(30,58,95,0.2); }
+.login-submit-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
 
 .login-hint-box {
     background: white;
@@ -264,8 +264,7 @@ body { background: var(--bg); color: var(--text); height: 100vh; overflow: hidde
     padding: 3px 8px;
     border-radius: 4px;
     font-weight: 600;
-    color: #1e3a5f;
-    font-family: 'Plus Jakarta Sans', monospace;
+    color: var(--brand);
 }
 
 .login-footer-right {
@@ -274,7 +273,6 @@ body { background: var(--bg); color: var(--text); height: 100vh; overflow: hidde
     color: #94a3b8;
 }
 
-/* Responsive Login */
 @media (max-width: 1024px) {
     .login-page { flex-direction: column; }
     .login-left { padding: 40px 30px; min-height: 40vh; }
@@ -294,7 +292,7 @@ body { background: var(--bg); color: var(--text); height: 100vh; overflow: hidde
 .main-app { display: flex; height: 100vh; }
 .sidebar { width: var(--sidebar-width); background: white; border-right: 1px solid var(--border); display: flex; flex-direction: column; transition: transform 0.3s ease; z-index: 100; }
 .sidebar.collapsed { transform: translateX(-100%); position: absolute; height: 100%; }
-.sidebar-header { padding: 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; font-weight: 800; font-size: 18px; color: var(--primary-dark); }
+.sidebar-header { padding: 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; font-weight: 800; font-size: 18px; color: var(--brand); }
 .sidebar-header .logo-text { flex: 1; }
 .sidebar-toggle { width: 28px; height: 28px; border-radius: 6px; border: none; background: var(--bg); cursor: pointer; color: var(--text-light); display: flex; align-items: center; justify-content: center; }
 .sidebar-toggle:hover { background: var(--primary-light); color: var(--primary); }
@@ -333,13 +331,10 @@ body { background: var(--bg); color: var(--text); height: 100vh; overflow: hidde
 .stat-info { flex: 1; min-width: 0; }
 .stat-label { font-size: 12px; color: var(--text-light); margin-bottom: 4px; font-weight: 500; }
 .stat-value { font-size: 22px; font-weight: 800; color: var(--text); }
-.stat-change { font-size: 11px; color: var(--primary); font-weight: 600; margin-top: 2px; }
 .dashboard-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .dash-card { background: white; padding: 20px; border-radius: var(--radius); border: 1px solid var(--border); }
 .dash-card h3 { font-size: 15px; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; color: var(--text); }
 .dash-card h3 i { color: var(--primary); }
-.top-products > div { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
-.top-products > div:last-child { border-bottom: none; }
 
 /* ========== KASIR ========== */
 .kasir-layout { display: grid; grid-template-columns: 1fr 380px; gap: 16px; height: calc(100vh - 140px); }
