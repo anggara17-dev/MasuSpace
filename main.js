@@ -3,11 +3,8 @@
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxneXJ5cGJ6YXNweXNpYnNzdHRtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE2NDM4MzIsImV4cCI6MjEwNzIxOTgzMn0.lUPnYTvG8KjxQe2-e2FAhuDXbh6XA2g31Vc2_JWObN4';
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    // Prevent any form from submitting via default behavior
-    document.addEventListener('submit', function(e) {
-        e.preventDefault();
-        return false;
-    });
+    // Prevent form default submit
+    document.addEventListener('submit', function(e) { e.preventDefault(); return false; });
 
     // STATE
     let state = {
@@ -31,7 +28,7 @@
 
     // ========== UTILITIES ==========
     function formatRp(num) {
-        return 'Rp ' + (num || 0).toLocaleString('id-ID');
+        return 'Rp ' + Math.round(num || 0).toLocaleString('id-ID');
     }
 
     function getJakartaDate() {
@@ -65,10 +62,7 @@
                 .eq('is_active', true)
                 .order('full_name');
             
-            if (error) {
-                console.error('Error loading users:', error);
-                return;
-            }
+            if (error) { console.error('Error loading users:', error); return; }
             
             const select = document.getElementById('loginUsername');
             if (!select) return;
@@ -83,16 +77,7 @@
                 select.appendChild(option);
             });
             
-            select.addEventListener('change', function() {
-                const selected = this.options[this.selectedIndex];
-                if (selected.dataset.role) {
-                    document.getElementById('loginRole').value = selected.dataset.role;
-                }
-            });
-            
-        } catch (e) {
-            console.error('Failed to load users:', e);
-        }
+        } catch (e) { console.error('Failed to load users:', e); }
     }
 
     window.togglePassword = function() {
@@ -110,17 +95,13 @@
     };
 
     window.handleLogin = async function(e) {
-        if (e) {
-            e.preventDefault();
-            e.stopPropagation();
-        }
+        if (e) { e.preventDefault(); e.stopPropagation(); }
         
         const username = document.getElementById('loginUsername').value.trim();
         const password = document.getElementById('loginPassword').value;
-        const role = document.getElementById('loginRole').value;
 
-        if (!username || !password || !role) {
-            showToast('Lengkapi semua field!', true);
+        if (!username || !password) {
+            showToast('Lengkapi username dan password!', true);
             return false;
         }
 
@@ -135,12 +116,11 @@
                 .select('*')
                 .eq('username', username)
                 .eq('password_hash', password)
-                .eq('role', role)
                 .eq('is_active', true)
                 .single();
 
             if (error || !data) {
-                showToast('Username/Password/Role salah!', true);
+                showToast('Username atau password salah!', true);
                 btn.innerHTML = originalText;
                 btn.disabled = false;
                 return false;
@@ -154,8 +134,11 @@
             document.body.classList.toggle('role-kasir', data.role === 'kasir');
             
             document.getElementById('userName').innerText = data.full_name;
+            document.getElementById('userName2').innerText = data.full_name;
             document.getElementById('userRole').innerText = data.role === 'owner' ? 'Administrator' : 'Kasir';
+            document.getElementById('userRole2').innerText = data.role === 'owner' ? 'Administrator' : 'Kasir';
             document.getElementById('userAvatar').innerText = data.full_name.charAt(0).toUpperCase();
+            document.getElementById('userAvatar2').innerText = data.full_name.charAt(0).toUpperCase();
 
             document.querySelectorAll('.nav-item[data-page]').forEach(btn => {
                 if (btn.classList.contains('owner-only') && data.role === 'kasir') {
@@ -184,7 +167,24 @@
         document.getElementById('loginPage').style.display = 'flex';
         document.getElementById('loginPassword').value = '';
         document.body.classList.remove('role-kasir');
+        window.closeUserMenu();
     };
+
+    // ========== USER MENU ==========
+    window.toggleUserMenu = function() {
+        document.getElementById('userDropdown').classList.toggle('show');
+    };
+
+    window.closeUserMenu = function() {
+        document.getElementById('userDropdown').classList.remove('show');
+    };
+
+    document.addEventListener('click', function(e) {
+        const userMenu = document.querySelector('.user-menu');
+        if (userMenu && !userMenu.contains(e.target)) {
+            window.closeUserMenu();
+        }
+    });
 
     // ========== NAVIGATION ==========
     window.navigate = async function(page) {
@@ -211,7 +211,6 @@
         if (page === 'products') await loadProducts();
         if (page === 'inventory') await loadInventory();
         if (page === 'cash') await loadCash();
-        if (page === 'expenses') await loadExpenses();
         if (page === 'accounting') await loadAccounting();
         if (page === 'investors') await loadInvestors();
         if (page === 'reports') await loadReports();
@@ -220,6 +219,7 @@
         if (window.innerWidth <= 1024) {
             document.getElementById('sidebar').classList.add('collapsed');
         }
+        window.closeUserMenu();
     };
 
     window.toggleSidebar = function() {
@@ -243,16 +243,24 @@
     async function loadDashboard() {
         const today = getTodayJakarta();
         try {
-            const [report, topProd, cash, inv] = await Promise.all([
+            const [report, topProd, cash, inv, expenses] = await Promise.all([
                 supabase.rpc('get_daily_report', { p_date: today }),
                 supabase.rpc('get_top_products', { p_date: today, p_limit: 5 }),
                 supabase.rpc('get_cash_sources'),
-                supabase.rpc('get_inventory_summary')
+                supabase.rpc('get_inventory_summary'),
+                supabase.from('expenses').select('amount').gte('created_at', today + 'T00:00:00')
             ]);
 
             const r = report.data || {};
+            const totalExpense = (expenses.data || []).reduce((s, e) => s + parseFloat(e.amount), 0);
+            const netProfit = (r.total_revenue || 0) - totalExpense;
+
             document.getElementById('statOrders').innerText = r.total_orders || 0;
             document.getElementById('statRevenue').innerText = formatRp(r.total_revenue || 0);
+            document.getElementById('statExpense').innerText = formatRp(totalExpense);
+            document.getElementById('statProfit').innerText = formatRp(netProfit);
+            document.getElementById('statProfit').style.color = netProfit >= 0 ? 'var(--primary-dark)' : '#ef4444';
+            
             const laci = (cash.data || []).find(c => c.name === 'Cash Kasir');
             document.getElementById('statCash').innerText = formatRp(laci?.current_balance || 0);
             document.getElementById('statLowStock').innerText = (inv.data?.low_stock || 0) + (inv.data?.out_of_stock || 0);
@@ -272,9 +280,7 @@
                 </div>
             `).join('') : '<p style="color:var(--text-light);text-align:center;padding:20px">Belum ada transaksi hari ini</p>';
 
-        } catch (e) {
-            console.error(e);
-        }
+        } catch (e) { console.error(e); }
     }
 
     // ========== KASIR ==========
@@ -291,7 +297,29 @@
         }
         renderCategories();
         renderProducts();
+        loadQuickExpenseSources();
     }
+
+    async function loadQuickExpenseSources() {
+        const { data } = await supabase.rpc('get_cash_sources');
+        const sources = data || [];
+        const select = document.getElementById('quickExpenseSource');
+        if (select) {
+            select.innerHTML = '<option value="">Sumber Kas</option>' + sources.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+        }
+    }
+
+    window.quickExpense = async function() {
+        const source = document.getElementById('quickExpenseSource').value;
+        const amount = parseFloat(document.getElementById('quickExpenseAmount').value) || 0;
+        const category = document.getElementById('quickExpenseCategory').value;
+        if (!source) { showToast('Pilih sumber kas!', true); return; }
+        if (!amount) { showToast('Jumlah wajib!', true); return; }
+        const { data, error } = await supabase.rpc('add_expense', { p_source_id: source, p_amount: amount, p_category: category, p_description: 'Pengeluaran kasir', p_created_by: state.currentUser?.id || null });
+        if (error || !data?.success) { showToast('Gagal', true); return; }
+        showToast('Pengeluaran dicatat!');
+        document.getElementById('quickExpenseAmount').value = '';
+    };
 
     function renderCategories() {
         const c = document.getElementById('categoriesContainer');
@@ -350,7 +378,7 @@
     function renderVariants() {
         document.getElementById('suhuVariants').innerHTML = `
             <div class="variant-option ${state.modalVariant.suhu === 'Hot' ? 'selected' : ''}" onclick="window.selVar('suhu','Hot')">☕ Hot</div>
-            <div class="variant-option ${state.modalVariant.suhu === 'Iced' ? 'selected' : ''}" onclick="window.selVar('suhu','Iced')">🧊 Iced (+2K)</div>`;
+            <div class="variant-option ${state.modalVariant.suhu === 'Iced' ? 'selected' : ''}" onclick="window.selVar('suhu','Iced')"> Iced (+2K)</div>`;
         document.getElementById('ukuranVariants').innerHTML = `
             <div class="variant-option ${state.modalVariant.ukuran === 'Regular' ? 'selected' : ''}" onclick="window.selVar('ukuran','Regular')">Regular</div>
             <div class="variant-option ${state.modalVariant.ukuran === 'Large' ? 'selected' : ''}" onclick="window.selVar('ukuran','Large')">Large (+5K)</div>`;
@@ -647,20 +675,23 @@
         document.getElementById('dailyReportContent').innerHTML = '<div style="text-align:center;padding:20px">Memuat...</div>';
         document.getElementById('dailyReportModal').classList.add('active');
         try {
-            const [report, topProd] = await Promise.all([
+            const [report, topProd, expenses] = await Promise.all([
                 supabase.rpc('get_daily_report', { p_date: today }),
-                supabase.rpc('get_top_products', { p_date: today, p_limit: 5 })
+                supabase.rpc('get_top_products', { p_date: today, p_limit: 5 }),
+                supabase.from('expenses').select('amount').gte('created_at', today + 'T00:00:00')
             ]);
             const r = report.data || {};
             const tp = topProd.data || [];
+            const totalExp = (expenses.data || []).reduce((s, e) => s + parseFloat(e.amount), 0);
+            const netProfit = (r.total_revenue || 0) - totalExp;
             document.getElementById('dailyReportContent').innerHTML = `
                 <div class="stats-grid" style="grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
                     <div class="stat-card"><div class="stat-info"><div class="stat-label">Total Order</div><div class="stat-value" style="font-size:18px">${r.total_orders||0}</div></div></div>
                     <div class="stat-card"><div class="stat-info"><div class="stat-label">Pendapatan</div><div class="stat-value" style="font-size:18px">${formatRp(r.total_revenue||0)}</div></div></div>
-                    <div class="stat-card"><div class="stat-info"><div class="stat-label">Cash</div><div class="stat-value" style="font-size:16px">${formatRp(r.cash_sales||0)}</div></div></div>
-                    <div class="stat-card"><div class="stat-info"><div class="stat-label">Non-Tunai</div><div class="stat-value" style="font-size:16px">${formatRp((r.qris_sales||0)+(r.debit_sales||0))}</div></div></div>
+                    <div class="stat-card"><div class="stat-info"><div class="stat-label">Pengeluaran</div><div class="stat-value" style="font-size:16px;color:#ef4444">${formatRp(totalExp)}</div></div></div>
+                    <div class="stat-card"><div class="stat-info"><div class="stat-label">Laba Bersih</div><div class="stat-value" style="font-size:16px;color:${netProfit>=0?'var(--primary)':'#ef4444'}">${formatRp(netProfit)}</div></div></div>
                 </div>
-                <h4 style="margin-bottom:10px"> Top Produk</h4>
+                <h4 style="margin-bottom:10px">🏆 Top Produk</h4>
                 ${tp.length ? tp.map((p,i) => `<div style="display:flex;justify-content:space-between;padding:8px;border-bottom:1px solid var(--border);font-size:13px"><span>${i+1}. ${p.name} (${p.total_qty}x)</span><b>${formatRp(p.total_revenue)}</b></div>`).join('') : '<p style="color:var(--text-light);text-align:center;padding:20px">Belum ada data</p>'}
             `;
         } catch (e) {
@@ -692,12 +723,18 @@
 
     // ========== ORDERS ==========
     async function loadOrders() {
-        const date = document.getElementById('orderFilterDate')?.value || null;
-        const { data } = await supabase.rpc('get_orders_with_details', { p_date: date });
+        const start = document.getElementById('orderFilterStart')?.value;
+        const end = document.getElementById('orderFilterEnd')?.value;
+        
+        let query = supabase.from('orders').select('*, app_users(full_name)').order('created_at', { ascending: false }).limit(100);
+        if (start) query = query.gte('created_at', start + 'T00:00:00');
+        if (end) query = query.lte('created_at', end + 'T23:59:59');
+        
+        const { data } = await query;
         const orders = data || [];
         const tbody = document.getElementById('ordersTableBody');
         if (orders.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--text-light)">Tidak ada data</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text-light)">Tidak ada data</td></tr>';
             document.getElementById('ordersSummary').innerHTML = '';
             return;
         }
@@ -711,11 +748,10 @@
                 <td>${new Date(o.created_at).toLocaleDateString('id-ID')}</td>
                 <td><span class="badge badge-info">${o.order_type}</span></td>
                 <td>${o.customer_name || '-'}</td>
-                <td>${o.cashier_name || '-'}</td>
+                <td>${o.app_users?.full_name || '-'}</td>
                 <td><span class="badge badge-${o.payment_method==='cash'?'success':o.payment_method==='qris'?'info':'warning'}">${(o.payment_method||'-').toUpperCase()}</span></td>
                 <td><b>${formatRp(o.total)}</b></td>
                 <td><span class="badge badge-${o.status==='paid'?'success':'warning'}">${o.status}</span></td>
-                <td><button class="btn-secondary" style="padding:6px 10px;font-size:11px"><i class="fas fa-eye"></i></button></td>
             </tr>`;
         }).join('');
 
@@ -728,6 +764,11 @@
         `;
     }
     window.loadOrders = loadOrders;
+    window.resetOrderFilter = function() {
+        document.getElementById('orderFilterStart').value = '';
+        document.getElementById('orderFilterEnd').value = '';
+        loadOrders();
+    };
 
     // ========== PRODUCTS ==========
     async function loadProducts() {
@@ -808,6 +849,7 @@
         const { data } = await supabase.rpc('get_ingredients_full');
         const ings = data || [];
         document.getElementById('ingredientsTableBody').innerHTML = ings.length ? ings.map(i => {
+            const stockValue = i.stock_qty * i.buy_price;
             const status = i.stock_qty <= 0 ? 'Habis' : i.stock_qty <= i.min_stock ? 'Menipis' : 'Aman';
             const badge = i.stock_qty <= 0 ? 'danger' : i.stock_qty <= i.min_stock ? 'warning' : 'success';
             return `<tr>
@@ -816,11 +858,12 @@
                 <td>${i.min_stock}</td>
                 <td>${i.unit}</td>
                 <td>${formatRp(i.buy_price)}</td>
+                <td><b>${formatRp(stockValue)}</b></td>
                 <td>${i.supplier || '-'}</td>
                 <td><span class="badge badge-${badge}">${status}</span></td>
                 <td class="owner-only"><button class="btn-secondary" style="padding:6px 10px;font-size:11px" onclick="window.editIngredient('${i.id}')"><i class="fas fa-edit"></i></button></td>
             </tr>`;
-        }).join('') : '<tr><td colspan="8" style="text-align:center;padding:30px">Tidak ada data</td></tr>';
+        }).join('') : '<tr><td colspan="9" style="text-align:center;padding:30px">Tidak ada data</td></tr>';
     }
     window.loadInventory = loadInventory;
 
@@ -872,12 +915,18 @@
         const sources = data || [];
         document.getElementById('cashSourcesGrid').innerHTML = sources.map(s => `
             <div class="cash-card">
-                <h4><i class="fas fa-wallet" style="margin-right:8px;color:var(--primary)"></i>${s.name}</h4>
+                <h4><i class="fas fa-vault" style="margin-right:8px;color:var(--primary)"></i>${s.name}</h4>
                 <div class="balance">${formatRp(s.current_balance)}</div>
             </div>
         `).join('');
 
-        const { data: muts } = await supabase.from('cash_mutations').select('*, cash_sources(name)').order('created_at', { ascending: false }).limit(30);
+        // Mutasi kas dengan filter tanggal
+        const start = document.getElementById('cashFilterStart')?.value;
+        const end = document.getElementById('cashFilterEnd')?.value;
+        let query = supabase.from('cash_mutations').select('*, cash_sources(name)').order('created_at', { ascending: false }).limit(50);
+        if (start) query = query.gte('created_at', start + 'T00:00:00');
+        if (end) query = query.lte('created_at', end + 'T23:59:59');
+        const { data: muts } = await query;
         const m = muts || [];
         document.getElementById('cashMutationsBody').innerHTML = m.length ? m.map(mut => `
             <tr>
@@ -893,9 +942,6 @@
         const toSelect = document.getElementById('transferTo');
         if (fromSelect) fromSelect.innerHTML = sources.map(s => `<option value="${s.id}">${s.name} (${formatRp(s.current_balance)})</option>`).join('');
         if (toSelect) toSelect.innerHTML = sources.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
-
-        const expSelect = document.getElementById('expenseSource');
-        if (expSelect) expSelect.innerHTML = sources.map(s => `<option value="${s.id}">${s.name} (${formatRp(s.current_balance)})</option>`).join('');
     }
     window.loadCash = loadCash;
 
@@ -919,65 +965,11 @@
         await loadCash();
     };
 
-    // ========== EXPENSES ==========
-    async function loadExpenses() {
-        const today = getTodayJakarta();
-        const weekAgo = new Date(Date.now() - 7*24*60*60*1000).toISOString().split('T')[0];
-        const monthStart = new Date().toISOString().slice(0,7) + '-01';
-
-        const [todayExp, weekExp, monthExp, allExp] = await Promise.all([
-            supabase.from('expenses').select('*, cash_sources(name)').gte('created_at', today + 'T00:00:00').order('created_at', { ascending: false }),
-            supabase.from('expenses').select('amount').gte('created_at', weekAgo + 'T00:00:00'),
-            supabase.from('expenses').select('amount').gte('created_at', monthStart + 'T00:00:00'),
-            supabase.from('expenses').select('*, cash_sources(name)').order('created_at', { ascending: false }).limit(50)
-        ]);
-
-        const sumToday = (todayExp.data || []).reduce((s, e) => s + parseFloat(e.amount), 0);
-        const sumWeek = (weekExp.data || []).reduce((s, e) => s + parseFloat(e.amount), 0);
-        const sumMonth = (monthExp.data || []).reduce((s, e) => s + parseFloat(e.amount), 0);
-
-        document.getElementById('expToday').innerText = formatRp(sumToday);
-        document.getElementById('expWeek').innerText = formatRp(sumWeek);
-        document.getElementById('expMonth').innerText = formatRp(sumMonth);
-
-        const exps = allExp.data || [];
-        document.getElementById('expensesTableBody').innerHTML = exps.length ? exps.map(e => `
-            <tr>
-                <td>${new Date(e.created_at).toLocaleDateString('id-ID')}</td>
-                <td><span class="badge badge-warning">${e.category}</span></td>
-                <td>${e.description || '-'}</td>
-                <td>${e.cash_sources?.name || '-'}</td>
-                <td style="color:#ef4444;font-weight:700">-${formatRp(e.amount)}</td>
-            </tr>
-        `).join('') : '<tr><td colspan="5" style="text-align:center;padding:30px">Belum ada pengeluaran</td></tr>';
-    }
-    window.loadExpenses = loadExpenses;
-
-    window.showExpenseModal = function() {
-        document.getElementById('expenseAmount').value = '';
-        document.getElementById('expenseDesc').value = '';
-        document.getElementById('expenseModal').classList.add('active');
-    };
-
-    window.processExpense = async function() {
-        const source = document.getElementById('expenseSource').value;
-        const category = document.getElementById('expenseCategory').value;
-        const amount = parseFloat(document.getElementById('expenseAmount').value) || 0;
-        const desc = document.getElementById('expenseDesc').value.trim();
-        if (!amount) { showToast('Jumlah wajib!', true); return; }
-        const { data, error } = await supabase.rpc('add_expense', { p_source_id: source, p_amount: amount, p_category: category, p_description: desc, p_created_by: state.currentUser?.id || null });
-        if (error || !data?.success) { showToast('Gagal', true); return; }
-        showToast('Pengeluaran dicatat!');
-        window.closeModal('expenseModal');
-        await loadExpenses();
-        await loadCash();
-    };
-
     // ========== ACCOUNTING ==========
     async function loadAccounting() {
         document.getElementById('accountingContent').innerHTML = `
             <div style="text-align:center;padding:60px;color:var(--text-light)">
-                <i class="fas fa-book" style="font-size:48px;margin-bottom:16px;color:var(--primary)"></i>
+                <i class="fas fa-book-open" style="font-size:48px;margin-bottom:16px;color:var(--primary)"></i>
                 <h3>Modul Akuntansi</h3>
                 <p style="margin-top:8px">Jurnal, Chart of Accounts, dan Laba Rugi akan ditampilkan di sini.</p>
             </div>
@@ -1039,8 +1031,26 @@
     };
 
     window.calculateProfitSharing = async function() {
-        const start = document.getElementById('psStart').value;
-        const end = document.getElementById('psEnd').value;
+        const period = document.getElementById('psPeriod').value;
+        let start = document.getElementById('psStart').value;
+        let end = document.getElementById('psEnd').value;
+        
+        const today = getTodayJakarta();
+        if (period === 'month') {
+            start = new Date().toISOString().slice(0,7) + '-01';
+            end = today;
+            document.getElementById('psStart').value = start;
+            document.getElementById('psEnd').value = end;
+        } else if (period === 'quarter') {
+            const now = new Date();
+            const quarter = Math.floor(now.getMonth() / 3);
+            const startMonth = quarter * 3;
+            start = new Date(now.getFullYear(), startMonth, 1).toISOString().split('T')[0];
+            end = today;
+            document.getElementById('psStart').value = start;
+            document.getElementById('psEnd').value = end;
+        }
+        
         if (!start || !end) { showToast('Pilih tanggal!', true); return; }
         const { data, error } = await supabase.rpc('calculate_profit_sharing', { p_start: start, p_end: end });
         if (error) { showToast('Gagal: ' + error.message, true); return; }
@@ -1145,7 +1155,6 @@
     document.addEventListener('DOMContentLoaded', function() {
         loadUsersToDropdown();
         
-        // Bind login form submit
         const loginForm = document.getElementById('loginForm');
         if (loginForm) {
             loginForm.addEventListener('submit', function(e) {
