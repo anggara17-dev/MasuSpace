@@ -233,9 +233,14 @@
         setTimeout(() => t.classList.remove('show'), 3000);
     }
 
-    document.getElementById('searchInput').addEventListener('input', renderProducts);
-    document.addEventListener('click', e => { if (e.target.id === 'productModal') window.closeModal(); });
+   function updateDate() {
+    const options = { weekday: 'long', day: 'numeric', month: 'long' };
+    document.getElementById('currentDate').innerText = new Date().toLocaleDateString('id-ID', options);
+}
 
-    // START
-    loadData();
+document.getElementById('searchInput').addEventListener('input', renderProducts);
+document.addEventListener('click', e => { if (e.target.id === 'productModal') window.closeModal(); });
+
+updateDate();
+loadData();
 })();
