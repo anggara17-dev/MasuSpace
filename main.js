@@ -3,6 +3,12 @@
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxneXJ5cGJ6YXNweXNpYnNzdHRtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE2NDM4MzIsImV4cCI6MjEwNzIxOTgzMn0.lUPnYTvG8KjxQe2-e2FAhuDXbh6XA2g31Vc2_JWObN4';
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+    // Prevent any form from submitting via default behavior
+    document.addEventListener('submit', function(e) {
+        e.preventDefault();
+        return false;
+    });
+
     // STATE
     let state = {
         currentUser: null,
@@ -19,7 +25,8 @@
         paymentMethod: 'cash',
         cashReceived: 0,
         discount: { type: 'percent', value: 0 },
-        orderType: 'dine_in'
+        orderType: 'dine_in',
+        currentReceipt: null
     };
 
     // ========== UTILITIES ==========
@@ -50,8 +57,64 @@
     }
 
     // ========== LOGIN ==========
+    async function loadUsersToDropdown() {
+        try {
+            const { data, error } = await supabase
+                .from('app_users')
+                .select('username, full_name, role')
+                .eq('is_active', true)
+                .order('full_name');
+            
+            if (error) {
+                console.error('Error loading users:', error);
+                return;
+            }
+            
+            const select = document.getElementById('loginUsername');
+            if (!select) return;
+            
+            select.innerHTML = '<option value="">— pilih user —</option>';
+            
+            (data || []).forEach(user => {
+                const option = document.createElement('option');
+                option.value = user.username;
+                option.textContent = `${user.full_name} (${user.role})`;
+                option.dataset.role = user.role;
+                select.appendChild(option);
+            });
+            
+            select.addEventListener('change', function() {
+                const selected = this.options[this.selectedIndex];
+                if (selected.dataset.role) {
+                    document.getElementById('loginRole').value = selected.dataset.role;
+                }
+            });
+            
+        } catch (e) {
+            console.error('Failed to load users:', e);
+        }
+    }
+
+    window.togglePassword = function() {
+        const input = document.getElementById('loginPassword');
+        const icon = document.getElementById('passwordIcon');
+        if (input.type === 'password') {
+            input.type = 'text';
+            icon.classList.remove('fa-eye');
+            icon.classList.add('fa-eye-slash');
+        } else {
+            input.type = 'password';
+            icon.classList.remove('fa-eye-slash');
+            icon.classList.add('fa-eye');
+        }
+    };
+
     window.handleLogin = async function(e) {
-        e.preventDefault();
+        if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        
         const username = document.getElementById('loginUsername').value.trim();
         const password = document.getElementById('loginPassword').value;
         const role = document.getElementById('loginRole').value;
@@ -61,38 +124,56 @@
             return false;
         }
 
-        const { data, error } = await supabase
-            .from('app_users')
-            .select('*')
-            .eq('username', username)
-            .eq('password_hash', password)
-            .eq('role', role)
-            .eq('is_active', true)
-            .single();
+        const btn = document.getElementById('loginBtn');
+        const originalText = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Memproses...';
+        btn.disabled = true;
 
-        if (error || !data) {
-            showToast('Username/Password/Role salah!', true);
-            return false;
-        }
+        try {
+            const { data, error } = await supabase
+                .from('app_users')
+                .select('*')
+                .eq('username', username)
+                .eq('password_hash', password)
+                .eq('role', role)
+                .eq('is_active', true)
+                .single();
 
-        state.currentUser = data;
-        document.getElementById('loginPage').style.display = 'none';
-        document.getElementById('mainApp').style.display = 'flex';
-        document.body.classList.toggle('role-kasir', data.role === 'kasir');
-        document.getElementById('userName').innerText = data.full_name;
-        document.getElementById('userRole').innerText = data.role === 'owner' ? 'Administrator' : 'Kasir';
-        document.getElementById('userAvatar').innerText = data.full_name.charAt(0).toUpperCase();
-
-        // Filter menu berdasarkan role
-        document.querySelectorAll('.nav-item[data-page]').forEach(btn => {
-            if (btn.classList.contains('owner-only') && data.role === 'kasir') {
-                btn.style.display = 'none';
-            } else {
-                btn.style.display = 'flex';
+            if (error || !data) {
+                showToast('Username/Password/Role salah!', true);
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+                return false;
             }
-        });
 
-        window.navigate('dashboard');
+            state.currentUser = data;
+            
+            document.getElementById('loginPage').style.display = 'none';
+            document.getElementById('mainApp').style.display = 'flex';
+            
+            document.body.classList.toggle('role-kasir', data.role === 'kasir');
+            
+            document.getElementById('userName').innerText = data.full_name;
+            document.getElementById('userRole').innerText = data.role === 'owner' ? 'Administrator' : 'Kasir';
+            document.getElementById('userAvatar').innerText = data.full_name.charAt(0).toUpperCase();
+
+            document.querySelectorAll('.nav-item[data-page]').forEach(btn => {
+                if (btn.classList.contains('owner-only') && data.role === 'kasir') {
+                    btn.style.display = 'none';
+                } else {
+                    btn.style.display = 'flex';
+                }
+            });
+
+            window.navigate('dashboard');
+            
+        } catch (err) {
+            console.error('Login error:', err);
+            showToast('Terjadi kesalahan: ' + err.message, true);
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }
+        
         return false;
     };
 
@@ -101,9 +182,7 @@
         state.cart = [];
         document.getElementById('mainApp').style.display = 'none';
         document.getElementById('loginPage').style.display = 'flex';
-        document.getElementById('loginUsername').value = '';
         document.getElementById('loginPassword').value = '';
-        document.getElementById('loginRole').value = '';
         document.body.classList.remove('role-kasir');
     };
 
@@ -126,7 +205,6 @@
         };
         document.getElementById('pageTitle').innerText = titles[page] || 'Dashboard';
 
-        // Load data per halaman
         if (page === 'dashboard') await loadDashboard();
         if (page === 'kasir') await loadKasirData();
         if (page === 'orders') await loadOrders();
@@ -139,7 +217,6 @@
         if (page === 'reports') await loadReports();
         if (page === 'settings') await loadSettings();
 
-        // Close sidebar di mobile
         if (window.innerWidth <= 1024) {
             document.getElementById('sidebar').classList.add('collapsed');
         }
@@ -180,7 +257,6 @@
             document.getElementById('statCash').innerText = formatRp(laci?.current_balance || 0);
             document.getElementById('statLowStock').innerText = (inv.data?.low_stock || 0) + (inv.data?.out_of_stock || 0);
 
-            // Payment breakdown
             const pbHtml = `
                 <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)"><span><i class="fas fa-money-bill-wave" style="color:#10b981;margin-right:8px"></i>Cash</span><b>${formatRp(r.cash_sales||0)}</b></div>
                 <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)"><span><i class="fas fa-qrcode" style="color:#3b82f6;margin-right:8px"></i>QRIS</span><b>${formatRp(r.qris_sales||0)}</b></div>
@@ -188,10 +264,9 @@
             `;
             document.getElementById('dashPaymentMethods').innerHTML = pbHtml;
 
-            // Top products
             const tp = topProd.data || [];
             document.getElementById('dashTopProducts').innerHTML = tp.length ? tp.map((p, i) => `
-                <div>
+                <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);font-size:13px">
                     <span><span style="background:var(--primary);color:white;width:20px;height:20px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:11px;margin-right:8px">${i+1}</span>${p.name} <small style="color:var(--text-light)">(${p.total_qty}x)</small></span>
                     <b>${formatRp(p.total_revenue)}</b>
                 </div>
@@ -199,7 +274,6 @@
 
         } catch (e) {
             console.error(e);
-            showToast('Gagal load dashboard', true);
         }
     }
 
@@ -276,7 +350,7 @@
     function renderVariants() {
         document.getElementById('suhuVariants').innerHTML = `
             <div class="variant-option ${state.modalVariant.suhu === 'Hot' ? 'selected' : ''}" onclick="window.selVar('suhu','Hot')">☕ Hot</div>
-            <div class="variant-option ${state.modalVariant.suhu === 'Iced' ? 'selected' : ''}" onclick="window.selVar('suhu','Iced')"> Iced (+2K)</div>`;
+            <div class="variant-option ${state.modalVariant.suhu === 'Iced' ? 'selected' : ''}" onclick="window.selVar('suhu','Iced')">🧊 Iced (+2K)</div>`;
         document.getElementById('ukuranVariants').innerHTML = `
             <div class="variant-option ${state.modalVariant.ukuran === 'Regular' ? 'selected' : ''}" onclick="window.selVar('ukuran','Regular')">Regular</div>
             <div class="variant-option ${state.modalVariant.ukuran === 'Large' ? 'selected' : ''}" onclick="window.selVar('ukuran','Large')">Large (+5K)</div>`;
@@ -492,7 +566,7 @@
             return;
         }
         const btn = document.querySelector('.confirm-payment-btn');
-        btn.innerText = '⏳ Memproses...'; btn.disabled = true;
+        btn.innerText = ' Memproses...'; btn.disabled = true;
         try {
             const discAmt = calcDiscount(sub);
             const { data, error } = await supabase.rpc('checkout_order', {
@@ -567,7 +641,7 @@
         w.document.close(); w.print();
     };
 
-    // ========== DAILY REPORT (Kasir) ==========
+    // ========== DAILY REPORT ==========
     window.showDailyReport = async function() {
         const today = getTodayJakarta();
         document.getElementById('dailyReportContent').innerHTML = '<div style="text-align:center;padding:20px">Memuat...</div>';
@@ -586,7 +660,7 @@
                     <div class="stat-card"><div class="stat-info"><div class="stat-label">Cash</div><div class="stat-value" style="font-size:16px">${formatRp(r.cash_sales||0)}</div></div></div>
                     <div class="stat-card"><div class="stat-info"><div class="stat-label">Non-Tunai</div><div class="stat-value" style="font-size:16px">${formatRp((r.qris_sales||0)+(r.debit_sales||0))}</div></div></div>
                 </div>
-                <h4 style="margin-bottom:10px">🏆 Top Produk</h4>
+                <h4 style="margin-bottom:10px"> Top Produk</h4>
                 ${tp.length ? tp.map((p,i) => `<div style="display:flex;justify-content:space-between;padding:8px;border-bottom:1px solid var(--border);font-size:13px"><span>${i+1}. ${p.name} (${p.total_qty}x)</span><b>${formatRp(p.total_revenue)}</b></div>`).join('') : '<p style="color:var(--text-light);text-align:center;padding:20px">Belum ada data</p>'}
             `;
         } catch (e) {
@@ -597,13 +671,13 @@
     // ========== HOLD ORDERS ==========
     window.showHoldOrders = async function() {
         const { data } = await supabase.from('orders').select('*').eq('status', 'held').order('created_at', { ascending: false });
-        state.holdOrders = data || [];
+        const holds = data || [];
         const c = document.getElementById('holdList');
-        if (state.holdOrders.length === 0) {
+        if (holds.length === 0) {
             c.innerHTML = '<div class="empty-hold">Tidak ada hold order</div>';
         } else {
-            c.innerHTML = state.holdOrders.map(o => `
-                <div class="hold-item" onclick="window.retrieveHold('${o.id}')">
+            c.innerHTML = holds.map(o => `
+                <div class="hold-item">
                     <div class="hold-item-header">
                         <span class="hold-item-number">${o.order_number}</span>
                         <span class="hold-item-time">${new Date(o.created_at).toLocaleTimeString('id-ID')}</span>
@@ -616,12 +690,6 @@
         document.getElementById('holdModal').classList.add('active');
     };
 
-    window.retrieveHold = async function(id) {
-        // Simple: just show alert for now
-        showToast('Fitur retrieve hold order');
-        window.closeModal('holdModal');
-    };
-
     // ========== ORDERS ==========
     async function loadOrders() {
         const date = document.getElementById('orderFilterDate')?.value || null;
@@ -630,6 +698,7 @@
         const tbody = document.getElementById('ordersTableBody');
         if (orders.length === 0) {
             tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--text-light)">Tidak ada data</td></tr>';
+            document.getElementById('ordersSummary').innerHTML = '';
             return;
         }
         let totalRev = 0, totalCash = 0, totalNonCash = 0;
@@ -646,7 +715,7 @@
                 <td><span class="badge badge-${o.payment_method==='cash'?'success':o.payment_method==='qris'?'info':'warning'}">${(o.payment_method||'-').toUpperCase()}</span></td>
                 <td><b>${formatRp(o.total)}</b></td>
                 <td><span class="badge badge-${o.status==='paid'?'success':'warning'}">${o.status}</span></td>
-                <td><button class="btn-secondary" style="padding:6px 10px;font-size:11px" onclick="alert('Detail: ${o.order_number}')"><i class="fas fa-eye"></i></button></td>
+                <td><button class="btn-secondary" style="padding:6px 10px;font-size:11px"><i class="fas fa-eye"></i></button></td>
             </tr>`;
         }).join('');
 
@@ -714,7 +783,7 @@
         if (error) { showToast('Gagal: ' + error.message, true); return; }
         showToast('Produk disimpan!');
         window.closeModal('productFormModal');
-        state.products = []; // reset cache
+        state.products = [];
         await loadProducts();
     };
 
@@ -820,13 +889,11 @@
             </tr>
         `).join('') : '<tr><td colspan="5" style="text-align:center;padding:30px">Belum ada mutasi</td></tr>';
 
-        // Populate transfer modal
         const fromSelect = document.getElementById('transferFrom');
         const toSelect = document.getElementById('transferTo');
         if (fromSelect) fromSelect.innerHTML = sources.map(s => `<option value="${s.id}">${s.name} (${formatRp(s.current_balance)})</option>`).join('');
         if (toSelect) toSelect.innerHTML = sources.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
 
-        // Populate expense modal
         const expSelect = document.getElementById('expenseSource');
         if (expSelect) expSelect.innerHTML = sources.map(s => `<option value="${s.id}">${s.name} (${formatRp(s.current_balance)})</option>`).join('');
     }
@@ -909,12 +976,11 @@
     // ========== ACCOUNTING ==========
     async function loadAccounting() {
         document.getElementById('accountingContent').innerHTML = `
-            <div class="stats-grid" style="grid-template-columns:repeat(3,1fr)">
-                <div class="stat-card"><div class="stat-info"><div class="stat-label">Total Revenue</div><div class="stat-value" style="color:var(--primary)">Loading...</div></div></div>
-                <div class="stat-card"><div class="stat-info"><div class="stat-label">Total Expense</div><div class="stat-value" style="color:#ef4444">Loading...</div></div></div>
-                <div class="stat-card"><div class="stat-info"><div class="stat-label">Net Profit</div><div class="stat-value">Loading...</div></div></div>
+            <div style="text-align:center;padding:60px;color:var(--text-light)">
+                <i class="fas fa-book" style="font-size:48px;margin-bottom:16px;color:var(--primary)"></i>
+                <h3>Modul Akuntansi</h3>
+                <p style="margin-top:8px">Jurnal, Chart of Accounts, dan Laba Rugi akan ditampilkan di sini.</p>
             </div>
-            <p style="text-align:center;padding:40px;color:var(--text-light)">Modul akuntansi lengkap akan ditampilkan di sini.</p>
         `;
     }
     window.loadAccounting = loadAccounting;
@@ -980,7 +1046,6 @@
         if (error) { showToast('Gagal: ' + error.message, true); return; }
         document.getElementById('profitResult').innerHTML = `
             <h4>Hasil Perhitungan (${start} s/d ${end})</h4>
-            <div class="profit-row"><span>Total Pendapatan</span><b>${formatRp(data.net_profit + (await supabase.from('expenses').select('amount').gte('created_at', start+'T00:00:00').lte('created_at', end+'T23:59:59').then(r => r.data?.reduce((s,e)=>s+parseFloat(e.amount),0) || 0))}</b></div>
             <div class="profit-row"><span>Laba Bersih</span><b style="color:var(--primary)">${formatRp(data.net_profit)}</b></div>
             <div class="profit-row"><span>Investor (70%)</span><b>${formatRp(data.investor_share)}</b></div>
             <div class="profit-row total"><span>Pengelola (30%)</span><b>${formatRp(data.manager_share)}</b></div>
@@ -1072,9 +1137,22 @@
     // ========== MODAL HELPERS ==========
     window.closeModal = function(id) { document.getElementById(id).classList.remove('active'); };
 
-    // Close modal on outside click
     document.addEventListener('click', e => {
         if (e.target.classList.contains('modal-overlay')) e.target.classList.remove('active');
+    });
+
+    // ========== INIT ==========
+    document.addEventListener('DOMContentLoaded', function() {
+        loadUsersToDropdown();
+        
+        // Bind login form submit
+        const loginForm = document.getElementById('loginForm');
+        if (loginForm) {
+            loginForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                window.handleLogin(e);
+            });
+        }
     });
 
 })();
