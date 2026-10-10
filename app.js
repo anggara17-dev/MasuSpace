@@ -1,9 +1,11 @@
 // ==========================================
 // 1. KONFIGURASI SUPABASE
-// GANTI DENGAN KREDENSIAL PROJECT BARU KAMU!
 // ==========================================
 const SUPABASE_URL = 'https://lgyrypbzaspysibssttm.supabase.co'; 
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxneXJ5cGJ6YXNweXNpYnNzdHRtIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MTY0MzgzMiwiZXhwIjoyMTA3MjE5ODMyfQ.hTo-_IRT3E3bCgFHcWQAqVlpgbKm2s4NHMS7on6KGE4'; 
+
+// ⚠️ PENTING: Ganti teks di bawah ini dengan 'anon public' key dari Supabase Dashboard!
+// JANGAN gunakan 'service_role' key di sini demi keamanan database kamu.
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxneXJ5cGJ6YXNweXNpYnNzdHRtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE2NDM4MzIsImV4cCI6MjEwNzIxOTgzMn0.lUPnYTvG8KjxQe2-e2FAhuDXbh6XA2g31Vc2_JWObN4'; 
 
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -13,10 +15,17 @@ const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 let state = {
     categories: [],
     products: [],
+    variants: [],
+    addons: [],
     cart: [],
     selectedCategory: null,
     orderType: 'dine_in',
-    taxRate: 10
+    taxRate: 10,
+    modalProduct: null,
+    modalVariant: { suhu: 'Hot', ukuran: 'Regular' },
+    modalAddons: [],
+    modalQty: 1,
+    modalNotes: ''
 };
 
 // ==========================================
@@ -36,29 +45,21 @@ function updateDate() {
 
 async function loadData() {
     try {
-        // Load Categories
-        const { data: cats, error: catError } = await supabase
-            .from('categories')
-            .select('*')
-            .eq('is_active', true)
-            .order('display_order');
-        
-        if (catError) throw catError;
+        const { data: cats } = await supabase.from('categories').select('*').eq('is_active', true).order('display_order');
         state.categories = cats || [];
 
-        // Load Products
-        const { data: prods, error: prodError } = await supabase
-            .from('products')
-            .select('*')
-            .eq('is_active', true)
-            .order('display_order');
-            
-        if (prodError) throw prodError;
+        const { data: prods } = await supabase.from('products').select('*').eq('is_active', true).order('display_order');
         state.products = prods || [];
+
+        const { data: vars } = await supabase.from('product_variants').select('*').eq('is_active', true);
+        state.variants = vars || [];
+
+        const { data: adds } = await supabase.from('addons').select('*').eq('is_active', true).order('display_order');
+        state.addons = adds || [];
         
     } catch (error) {
         console.error("Error loading data:", error);
-        showToast("Gagal memuat data dari database!", true);
+        showToast("Gagal memuat data! Cek Console (F12).", true);
     }
 }
 
@@ -68,7 +69,6 @@ async function loadData() {
 function renderCategories() {
     const container = document.getElementById('categoriesContainer');
     
-    // Tambahkan tombol "All" di awal
     let html = `
         <div class="category-card ${state.selectedCategory === null ? 'active' : ''}" 
              onclick="selectCategory(null)">
@@ -107,7 +107,7 @@ function renderProducts() {
     }
 
     container.innerHTML = filtered.map(p => `
-        <div class="product-card" onclick="addToCart('${p.id}')">
+        <div class="product-card" onclick="openProductModal('${p.id}')">
             <div class="product-img">☕</div>
             <div class="product-name">${p.name}</div>
             <div class="product-price">Rp ${parseInt(p.base_price).toLocaleString('id-ID')}</div>
@@ -125,34 +125,159 @@ function selectCategory(id) {
 document.getElementById('searchInput').addEventListener('input', renderProducts);
 
 // ==========================================
-// 5. LOGIKA KERANJANG (CART)
+// 5. MODAL PRODUK (VARIAN & ADD-ONS)
 // ==========================================
-function addToCart(productId) {
+function openProductModal(productId) {
     const product = state.products.find(p => p.id === productId);
     if (!product) return;
 
-    const existingItem = state.cart.find(item => item.product_id === productId);
-    
-    if (existingItem) {
-        existingItem.qty += 1;
-    } else {
-        state.cart.push({
-            product_id: product.id,
-            name: product.name,
-            price: parseFloat(product.base_price),
-            qty: 1
-        });
-    }
-    
-    renderCart();
-    showToast(`${product.name} ditambahkan!`);
+    state.modalProduct = product;
+    state.modalVariant = { suhu: 'Hot', ukuran: 'Regular' };
+    state.modalAddons = [];
+    state.modalQty = 1;
+    state.modalNotes = '';
+
+    renderModalVariants();
+    renderModalAddons();
+    updateModalTotal();
+
+    document.getElementById('modalProductName').innerText = product.name;
+    document.getElementById('modalNotes').value = '';
+    document.getElementById('productModal').classList.add('active');
 }
 
+function closeModal() {
+    document.getElementById('productModal').classList.remove('active');
+    state.modalProduct = null;
+}
+
+function renderModalVariants() {
+    const suhuContainer = document.getElementById('suhuVariants');
+    const ukuranContainer = document.getElementById('ukuranVariants');
+
+    suhuContainer.innerHTML = `
+        <div class="variant-option ${state.modalVariant.suhu === 'Hot' ? 'selected' : ''}" 
+             onclick="selectVariant('suhu', 'Hot')">Hot</div>
+        <div class="variant-option ${state.modalVariant.suhu === 'Iced' ? 'selected' : ''}" 
+             onclick="selectVariant('suhu', 'Iced')">Iced (+Rp 2.000)</div>
+    `;
+
+    ukuranContainer.innerHTML = `
+        <div class="variant-option ${state.modalVariant.ukuran === 'Regular' ? 'selected' : ''}" 
+             onclick="selectVariant('ukuran', 'Regular')">Regular</div>
+        <div class="variant-option ${state.modalVariant.ukuran === 'Large' ? 'selected' : ''}" 
+             onclick="selectVariant('ukuran', 'Large')">Large (+Rp 3.000)</div>
+    `;
+}
+
+function selectVariant(type, value) {
+    state.modalVariant[type] = value;
+    renderModalVariants();
+    updateModalTotal();
+}
+
+function renderModalAddons() {
+    const container = document.getElementById('addonsList');
+    container.innerHTML = state.addons.map(addon => `
+        <div class="addon-item">
+            <div class="addon-info">
+                <input type="checkbox" class="addon-checkbox" 
+                       ${state.modalAddons.includes(addon.id) ? 'checked' : ''}
+                       onchange="toggleAddon('${addon.id}', ${addon.price})">
+                <span>${addon.name}</span>
+            </div>
+            <span class="addon-price">+Rp ${addon.price.toLocaleString('id-ID')}</span>
+        </div>
+    `).join('');
+}
+
+function toggleAddon(addonId, price) {
+    if (state.modalAddons.includes(addonId)) {
+        state.modalAddons = state.modalAddons.filter(id => id !== addonId);
+    } else {
+        state.modalAddons.push(addonId);
+    }
+    updateModalTotal();
+}
+
+function changeModalQty(delta) {
+    state.modalQty = Math.max(1, state.modalQty + delta);
+    document.getElementById('modalQty').innerText = state.modalQty;
+    updateModalTotal();
+}
+
+function updateModalTotal() {
+    if (!state.modalProduct) return;
+
+    let price = parseFloat(state.modalProduct.base_price);
+
+    if (state.modalVariant.suhu === 'Iced') price += 2000;
+    if (state.modalVariant.ukuran === 'Large') price += 3000;
+
+    state.modalAddons.forEach(addonId => {
+        const addon = state.addons.find(a => a.id === addonId);
+        if (addon) price += parseFloat(addon.price);
+    });
+
+    const total = price * state.modalQty;
+    document.getElementById('modalTotal').innerText = `Rp ${total.toLocaleString('id-ID')}`;
+}
+
+function addToCartFromModal() {
+    if (!state.modalProduct) return;
+
+    let unitPrice = parseFloat(state.modalProduct.base_price);
+    if (state.modalVariant.suhu === 'Iced') unitPrice += 2000;
+    if (state.modalVariant.ukuran === 'Large') unitPrice += 3000;
+
+    const selectedAddons = state.modalAddons.map(id => {
+        const addon = state.addons.find(a => a.id === id);
+        unitPrice += parseFloat(addon.price);
+        return { id: addon.id, name: addon.name, price: addon.price };
+    });
+
+    const notes = document.getElementById('modalNotes').value;
+
+    const existingIndex = state.cart.findIndex(item => 
+        item.product_id === state.modalProduct.id &&
+        item.variant_suhu === state.modalVariant.suhu &&
+        item.variant_ukuran === state.modalVariant.ukuran &&
+        JSON.stringify(item.addons) === JSON.stringify(selectedAddons)
+    );
+
+    if (existingIndex >= 0) {
+        state.cart[existingIndex].qty += state.modalQty;
+    } else {
+        state.cart.push({
+            product_id: state.modalProduct.id,
+            name: state.modalProduct.name,
+            unit_price: unitPrice,
+            qty: state.modalQty,
+            variant_suhu: state.modalVariant.suhu,
+            variant_ukuran: state.modalVariant.ukuran,
+            addons: selectedAddons,
+            notes: notes
+        });
+    }
+
+    closeModal();
+    renderCart();
+    showToast(`${state.modalProduct.name} ditambahkan!`);
+}
+
+// ==========================================
+// 6. LOGIKA KERANJANG (CART)
+// ==========================================
 function updateQty(index, change) {
     state.cart[index].qty += change;
     if (state.cart[index].qty <= 0) {
         state.cart.splice(index, 1);
     }
+    renderCart();
+}
+
+function removeFromCart(index) {
+    state.cart.splice(index, 1);
     renderCart();
 }
 
@@ -165,22 +290,29 @@ function renderCart() {
         return;
     }
 
-    container.innerHTML = state.cart.map((item, index) => `
+    container.innerHTML = state.cart.map((item, index) => {
+        const variantText = `${item.variant_suhu} / ${item.variant_ukuran}`;
+        const addonsText = item.addons.length > 0 ? item.addons.map(a => a.name).join(', ') : '';
+        
+        return `
         <div class="order-item">
             <div class="item-info">
                 <h5>${item.name}</h5>
-                <p>Rp ${item.price.toLocaleString('id-ID')}</p>
+                <p>${variantText} • Rp ${item.unit_price.toLocaleString('id-ID')}</p>
+                ${addonsText ? `<p style="font-size: 11px; color: var(--primary);">+ ${addonsText}</p>` : ''}
+                ${item.notes ? `<p style="font-size: 11px; color: var(--text-light);">📝 ${item.notes}</p>` : ''}
                 <div class="item-qty">
                     <button class="qty-btn" onclick="updateQty(${index}, -1)"><i class="fas fa-minus"></i></button>
                     <span>${item.qty}</span>
                     <button class="qty-btn" onclick="updateQty(${index}, 1)"><i class="fas fa-plus"></i></button>
+                    <button class="qty-btn" onclick="removeFromCart(${index})" style="margin-left: 5px; color: #ef4444;"><i class="fas fa-trash"></i></button>
                 </div>
             </div>
-            <div class="item-total">Rp ${(item.price * item.qty).toLocaleString('id-ID')}</div>
+            <div class="item-total">Rp ${(item.unit_price * item.qty).toLocaleString('id-ID')}</div>
         </div>
-    `).join('');
+    `}).join('');
 
-    const subtotal = state.cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
+    const subtotal = state.cart.reduce((sum, item) => sum + (item.unit_price * item.qty), 0);
     updateTotals(subtotal);
 }
 
@@ -203,7 +335,7 @@ function setOrderType(type, btn) {
 }
 
 // ==========================================
-// 6. CHECKOUT (Kirim ke Supabase)
+// 7. CHECKOUT
 // ==========================================
 async function processCheckout() {
     if (state.cart.length === 0) return;
@@ -213,22 +345,22 @@ async function processCheckout() {
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
     btn.disabled = true;
 
-    const subtotal = state.cart.reduce((sum, item) => sum + (item.price * item.qty), 0);
+    const subtotal = state.cart.reduce((sum, item) => sum + (item.unit_price * item.qty), 0);
     const tax = subtotal * (state.taxRate / 100);
     const total = subtotal + tax;
 
     const itemsPayload = state.cart.map(item => ({
         product_id: item.product_id,
-        variant_id: null, 
+        variant_id: null,
         qty: item.qty,
-        unit_price: item.price,
-        addons: [],
-        notes: ''
+        unit_price: item.unit_price,
+        addons: item.addons,
+        notes: item.notes
     }));
 
     try {
         const { data, error } = await supabase.rpc('checkout_order', {
-            p_cashier_id: null, 
+            p_cashier_id: null,
             p_customer_name: document.getElementById('customerName').value || 'Walk-in',
             p_table_number: document.getElementById('tableNumber').value,
             p_order_type: state.orderType,
@@ -236,7 +368,7 @@ async function processCheckout() {
             p_discount_amount: 0,
             p_discount_percent: 0,
             p_tax_amount: tax,
-            p_payment_method: 'cash', 
+            p_payment_method: 'cash',
             p_paid_amount: total,
             p_notes: ''
         });
@@ -245,14 +377,12 @@ async function processCheckout() {
 
         showToast(`Order ${data.order_number} Berhasil!`);
         
-        // Reset Cart & Form
         state.cart = [];
         renderCart();
         document.getElementById('customerName').value = '';
         document.getElementById('tableNumber').value = '';
         
-        // Update counter (simulasi)
-        let currentCount = parseInt(document.getElementById('totalOrders').innerText);
+        let currentCount = parseInt(document.getElementById('totalOrders').innerText) || 0;
         document.getElementById('totalOrders').innerText = `${currentCount + 1} Orders`;
 
     } catch (error) {
@@ -271,3 +401,8 @@ function showToast(msg, isError = false) {
     toast.classList.add('show');
     setTimeout(() => toast.classList.remove('show'), 3000);
 }
+
+document.addEventListener('click', (e) => {
+    const modal = document.getElementById('productModal');
+    if (e.target === modal) closeModal();
+});
