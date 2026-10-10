@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MasuSpace POS - Coffee Shop System</title>
+    <title>MasuSpace POS - Complete System</title>
     <link rel="stylesheet" href="style.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -11,133 +11,363 @@
 </head>
 <body>
 
-    <header class="header">
-        <div class="header-left">
-            <div class="logo"><i class="fas fa-mug-hot"></i> MASU<br>SPACE</div>
-            <div class="date-display" id="currentDate">Loading...</div>
-        </div>
-        <div class="header-right">
-            <div class="header-stat">Today: <strong id="totalOrders">0 Orders</strong></div>
-            <div class="header-stat">Revenue: <strong id="todayRevenue">Rp 0</strong></div>
-            <button class="btn-report" onclick="window.showReport()"><i class="fas fa-chart-bar"></i> Report</button>
-            <div class="user-profile">
-                <div class="user-avatar">MS</div>
-                <div class="user-info">
-                    <div class="user-name">Admin Masu</div>
-                    <div class="user-role">Cashier</div>
+    <!-- LOGIN PAGE -->
+    <div id="loginPage" class="login-page">
+        <div class="login-container">
+            <div class="login-logo">
+                <i class="fas fa-mug-hot"></i>
+                <h1>MASUSPACE</h1>
+                <p>Coffee Shop Management System</p>
+            </div>
+            <div class="login-form">
+                <h2>Masuk ke Sistem</h2>
+                <div class="pin-display" id="pinDisplay"></div>
+                <div class="pin-pad">
+                    <button onclick="window.addPin('1')">1</button>
+                    <button onclick="window.addPin('2')">2</button>
+                    <button onclick="window.addPin('3')">3</button>
+                    <button onclick="window.addPin('4')">4</button>
+                    <button onclick="window.addPin('5')">5</button>
+                    <button onclick="window.addPin('6')">6</button>
+                    <button onclick="window.addPin('7')">7</button>
+                    <button onclick="window.addPin('8')">8</button>
+                    <button onclick="window.addPin('9')">9</button>
+                    <button onclick="window.clearPin()" class="btn-clear">C</button>
+                    <button onclick="window.addPin('0')">0</button>
+                    <button onclick="window.submitPin()" class="btn-enter"><i class="fas fa-arrow-right"></i></button>
                 </div>
+                <p class="login-hint">PIN Default: <strong>1234</strong></p>
             </div>
-        </div>
-    </header>
-
-    <div class="main-container">
-        <div class="left-panel">
-            <div class="search-bar">
-                <i class="fas fa-search"></i>
-                <input type="text" placeholder="Search menu..." id="searchInput">
-            </div>
-            <div class="categories" id="categoriesContainer"></div>
-            <div class="products-grid" id="productsGrid">
-                <div class="loading">Loading products...</div>
-            </div>
-        </div>
-
-        <div class="right-panel">
-            <div class="order-header">
-                <div class="order-title">
-                    <h3>Current Order</h3>
-                    <p id="orderNumber">#NEW ORDER</p>
-                </div>
-                <button class="btn-hold" onclick="window.showHoldOrders()" title="Hold Orders"><i class="fas fa-pause-circle"></i></button>
-            </div>
-            
-            <div class="order-type-toggle">
-                <button class="type-btn active" onclick="window.setOrderType('dine_in', this)">Dine In</button>
-                <button class="type-btn" onclick="window.setOrderType('takeaway', this)">Take Away</button>
-            </div>
-            
-            <div class="customer-info">
-                <div class="input-group">
-                    <label>Customer Name</label>
-                    <input type="text" id="customerName" placeholder="Walk-in Customer">
-                </div>
-                <div class="input-group">
-                    <label>Table / Note</label>
-                    <input type="text" id="tableNumber" placeholder="Table 1">
-                </div>
-            </div>
-            
-            <div class="order-list-header">Order List</div>
-            <div class="order-list" id="orderList">
-                <div class="empty-order"><i class="fas fa-shopping-basket"></i><p>No items yet</p></div>
-            </div>
-            
-            <div class="payment-details">
-                <div class="payment-row"><span>Subtotal</span><span id="subtotal">Rp 0</span></div>
-                <div class="payment-row total"><span>Total</span><span id="total">Rp 0</span></div>
-            </div>
-            
-            <button class="place-order-btn" id="placeOrderBtn" onclick="window.showPaymentModal()" disabled>
-                <span>Payment</span>
-                <span id="btnTotal">Rp 0</span>
-                <i class="fas fa-arrow-right"></i>
-            </button>
         </div>
     </div>
 
+    <!-- MAIN APP -->
+    <div id="mainApp" class="main-app" style="display:none;">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <i class="fas fa-mug-hot"></i>
+                <span>MASUSPACE</span>
+            </div>
+            <nav class="sidebar-nav">
+                <button class="nav-item active" data-page="dashboard" onclick="window.navigate('dashboard')">
+                    <i class="fas fa-home"></i><span>Dashboard</span>
+                </button>
+                <button class="nav-item" data-page="kasir" onclick="window.navigate('kasir')">
+                    <i class="fas fa-cash-register"></i><span>Kasir</span>
+                </button>
+                <button class="nav-item" data-page="orders" onclick="window.navigate('orders')">
+                    <i class="fas fa-receipt"></i><span>Riwayat Order</span>
+                </button>
+                <button class="nav-item" data-page="products" onclick="window.navigate('products')">
+                    <i class="fas fa-coffee"></i><span>Daftar Menu</span>
+                </button>
+                <button class="nav-item" data-page="inventory" onclick="window.navigate('inventory')">
+                    <i class="fas fa-boxes-stacked"></i><span>Inventory</span>
+                </button>
+                <button class="nav-item" data-page="cash" onclick="window.navigate('cash')">
+                    <i class="fas fa-wallet"></i><span>Kas & Bank</span>
+                </button>
+                <button class="nav-item" data-page="accounting" onclick="window.navigate('accounting')">
+                    <i class="fas fa-book"></i><span>Akuntansi</span>
+                </button>
+                <button class="nav-item" data-page="reports" onclick="window.navigate('reports')">
+                    <i class="fas fa-chart-line"></i><span>Laporan</span>
+                </button>
+                <button class="nav-item" data-page="settings" onclick="window.navigate('settings')">
+                    <i class="fas fa-cog"></i><span>Pengaturan</span>
+                </button>
+            </nav>
+            <div class="sidebar-footer">
+                <button class="nav-item" onclick="window.logout()">
+                    <i class="fas fa-sign-out-alt"></i><span>Logout</span>
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Header -->
+            <header class="app-header">
+                <div class="header-left">
+                    <h2 id="pageTitle">Dashboard</h2>
+                    <span class="header-date" id="headerDate"></span>
+                </div>
+                <div class="header-right">
+                    <div class="user-info">
+                        <div class="user-avatar">MS</div>
+                        <div>
+                            <div class="user-name" id="userName">Admin</div>
+                            <div class="user-role" id="userRole">Administrator</div>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Pages Container -->
+            <div class="pages-container">
+                
+                <!-- DASHBOARD PAGE -->
+                <div id="page-dashboard" class="page active">
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-icon" style="background:#dbeafe;color:#2563eb"><i class="fas fa-shopping-bag"></i></div>
+                            <div class="stat-info">
+                                <div class="stat-label">Order Hari Ini</div>
+                                <div class="stat-value" id="statOrders">0</div>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon" style="background:#d1fae5;color:#059669"><i class="fas fa-money-bill-wave"></i></div>
+                            <div class="stat-info">
+                                <div class="stat-label">Pendapatan</div>
+                                <div class="stat-value" id="statRevenue">Rp 0</div>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon" style="background:#fef3c7;color:#d97706"><i class="fas fa-coins"></i></div>
+                            <div class="stat-info">
+                                <div class="stat-label">Saldo Kasir</div>
+                                <div class="stat-value" id="statCash">Rp 0</div>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon" style="background:#fee2e2;color:#dc2626"><i class="fas fa-box"></i></div>
+                            <div class="stat-info">
+                                <div class="stat-label">Stok Menipis</div>
+                                <div class="stat-value" id="statLowStock">0</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="dashboard-grid">
+                        <div class="dash-card">
+                            <h3><i class="fas fa-chart-pie"></i> Pembayaran Hari Ini</h3>
+                            <div id="dashPaymentMethods" class="payment-breakdown"></div>
+                        </div>
+                        <div class="dash-card">
+                            <h3><i class="fas fa-trophy"></i> Produk Terlaris</h3>
+                            <div id="dashTopProducts" class="top-products"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- KASIR PAGE -->
+                <div id="page-kasir" class="page">
+                    <div class="kasir-layout">
+                        <div class="kasir-left">
+                            <div class="search-bar">
+                                <i class="fas fa-search"></i>
+                                <input type="text" placeholder="Cari menu..." id="searchInput">
+                            </div>
+                            <div class="categories" id="categoriesContainer"></div>
+                            <div class="products-grid" id="productsGrid"></div>
+                        </div>
+                        <div class="kasir-right">
+                            <div class="order-header">
+                                <div>
+                                    <h3>Order Aktif</h3>
+                                    <p id="orderNumber">#NEW</p>
+                                </div>
+                                <button class="btn-hold" onclick="window.showHoldOrders()" title="Hold"><i class="fas fa-pause"></i></button>
+                            </div>
+                            <div class="order-type-toggle">
+                                <button class="type-btn active" onclick="window.setOrderType('dine_in', this)">Dine In</button>
+                                <button class="type-btn" onclick="window.setOrderType('takeaway', this)">Take Away</button>
+                            </div>
+                            <div class="customer-info">
+                                <div class="input-group">
+                                    <label>Nama</label>
+                                    <input type="text" id="customerName" placeholder="Customer">
+                                </div>
+                                <div class="input-group">
+                                    <label>Meja</label>
+                                    <input type="text" id="tableNumber" placeholder="Table 1">
+                                </div>
+                            </div>
+                            <div class="order-list-header">Item Order</div>
+                            <div class="order-list" id="orderList">
+                                <div class="empty-order"><i class="fas fa-shopping-basket"></i><p>Belum ada item</p></div>
+                            </div>
+                            <div class="payment-details">
+                                <div class="payment-row"><span>Subtotal</span><span id="subtotal">Rp 0</span></div>
+                                <div class="payment-row total"><span>Total</span><span id="total">Rp 0</span></div>
+                            </div>
+                            <button class="place-order-btn" id="placeOrderBtn" onclick="window.showPaymentModal()" disabled>
+                                <span>Bayar</span><span id="btnTotal">Rp 0</span><i class="fas fa-arrow-right"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ORDERS PAGE -->
+                <div id="page-orders" class="page">
+                    <div class="page-header">
+                        <h2>Riwayat Order</h2>
+                        <div class="filter-group">
+                            <input type="date" id="orderFilterDate" onchange="window.loadOrders()">
+                            <button class="btn-primary" onclick="window.loadOrders()"><i class="fas fa-filter"></i> Filter</button>
+                        </div>
+                    </div>
+                    <div class="orders-summary" id="ordersSummary"></div>
+                    <div class="table-container">
+                        <table class="data-table" id="ordersTable">
+                            <thead><tr><th>No. Order</th><th>Tanggal</th><th>Tipe</th><th>Customer</th><th>Metode</th><th>Total</th><th>Status</th><th>Aksi</th></tr></thead>
+                            <tbody id="ordersTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- PRODUCTS PAGE -->
+                <div id="page-products" class="page">
+                    <div class="page-header">
+                        <h2>Daftar Menu</h2>
+                        <button class="btn-primary" onclick="window.showProductForm()"><i class="fas fa-plus"></i> Tambah Produk</button>
+                    </div>
+                    <div class="tabs">
+                        <button class="tab active" onclick="window.switchProductTab('products', this)">Produk</button>
+                        <button class="tab" onclick="window.switchProductTab('categories', this)">Kategori</button>
+                        <button class="tab" onclick="window.switchProductTab('addons', this)">Add-ons</button>
+                    </div>
+                    <div class="table-container">
+                        <table class="data-table" id="productsTable">
+                            <thead><tr><th>Nama</th><th>Kategori</th><th>Harga</th><th>Status</th><th>Aksi</th></tr></thead>
+                            <tbody id="productsTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- INVENTORY PAGE -->
+                <div id="page-inventory" class="page">
+                    <div class="page-header">
+                        <h2>Inventory & Bahan Baku</h2>
+                        <button class="btn-primary" onclick="window.showIngredientForm()"><i class="fas fa-plus"></i> Tambah Bahan</button>
+                    </div>
+                    <div class="stats-grid">
+                        <div class="stat-card"><div class="stat-info"><div class="stat-label">Total Bahan</div><div class="stat-value" id="invTotal">0</div></div></div>
+                        <div class="stat-card"><div class="stat-info"><div class="stat-label">Stok Menipis</div><div class="stat-value" id="invLow">0</div></div></div>
+                        <div class="stat-card"><div class="stat-info"><div class="stat-label">Habis</div><div class="stat-value" id="invOut">0</div></div></div>
+                        <div class="stat-card"><div class="stat-info"><div class="stat-label">Nilai Inventory</div><div class="stat-value" id="invValue">Rp 0</div></div></div>
+                    </div>
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead><tr><th>Nama Bahan</th><th>Stok</th><th>Min. Stok</th><th>Satuan</th><th>Harga Beli</th><th>Status</th><th>Aksi</th></tr></thead>
+                            <tbody id="ingredientsTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- CASH PAGE -->
+                <div id="page-cash" class="page">
+                    <div class="page-header">
+                        <h2>Kas & Bank</h2>
+                        <div class="filter-group">
+                            <button class="btn-primary" onclick="window.showTransferModal()"><i class="fas fa-exchange-alt"></i> Transfer</button>
+                            <button class="btn-primary" onclick="window.showExpenseModal()"><i class="fas fa-minus-circle"></i> Pengeluaran</button>
+                        </div>
+                    </div>
+                    <div class="cash-sources-grid" id="cashSourcesGrid"></div>
+                    <div class="page-section">
+                        <h3><i class="fas fa-history"></i> Riwayat Mutasi Kas</h3>
+                        <div class="table-container">
+                            <table class="data-table">
+                                <thead><tr><th>Tanggal</th><th>Sumber</th><th>Tipe</th><th>Deskripsi</th><th>Jumlah</th></tr></thead>
+                                <tbody id="cashMutationsBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ACCOUNTING PAGE -->
+                <div id="page-accounting" class="page">
+                    <div class="tabs">
+                        <button class="tab active" onclick="window.switchAccountingTab('journal', this)">Jurnal</button>
+                        <button class="tab" onclick="window.switchAccountingTab('coa', this)">Chart of Accounts</button>
+                        <button class="tab" onclick="window.switchAccountingTab('pl', this)">Laba Rugi</button>
+                    </div>
+                    <div id="accountingContent"></div>
+                </div>
+
+                <!-- REPORTS PAGE -->
+                <div id="page-reports" class="page">
+                    <div class="page-header">
+                        <h2>Laporan Penjualan</h2>
+                        <div class="filter-group">
+                            <input type="date" id="reportStartDate">
+                            <input type="date" id="reportEndDate">
+                            <button class="btn-primary" onclick="window.loadSalesReport()"><i class="fas fa-chart-bar"></i> Generate</button>
+                        </div>
+                    </div>
+                    <div class="stats-grid" id="reportStats"></div>
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead><tr><th>Tanggal</th><th>Jumlah Order</th><th>Cash</th><th>QRIS</th><th>Debit</th><th>Total</th></tr></thead>
+                            <tbody id="reportTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- SETTINGS PAGE -->
+                <div id="page-settings" class="page">
+                    <div class="page-header"><h2>Pengaturan</h2></div>
+                    <div class="settings-grid">
+                        <div class="settings-card">
+                            <h3><i class="fas fa-store"></i> Info Toko</h3>
+                            <div class="input-group"><label>Nama Toko</label><input type="text" id="settingStoreName" value="MasuSpace"></div>
+                            <div class="input-group"><label>Alamat</label><input type="text" id="settingAddress"></div>
+                            <div class="input-group"><label>Telepon</label><input type="text" id="settingPhone"></div>
+                            <div class="input-group"><label>Email</label><input type="email" id="settingEmail"></div>
+                            <button class="btn-primary" onclick="window.saveSettings()">Simpan</button>
+                        </div>
+                        <div class="settings-card">
+                            <h3><i class="fas fa-percent"></i> Pajak</h3>
+                            <div class="input-group"><label>Aktifkan Pajak</label>
+                                <select id="settingTaxEnabled"><option value="true">Ya</option><option value="false">Tidak</option></select>
+                            </div>
+                            <div class="input-group"><label>Rate (%)</label><input type="number" id="settingTaxRate" value="0"></div>
+                            <button class="btn-primary" onclick="window.saveSettings()">Simpan</button>
+                        </div>
+                        <div class="settings-card">
+                            <h3><i class="fas fa-key"></i> Ganti PIN</h3>
+                            <div class="input-group"><label>PIN Baru (4 digit)</label><input type="password" id="newPin" maxlength="4"></div>
+                            <button class="btn-primary" onclick="window.changePin()">Update PIN</button>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+    </div>
+
+    <!-- MODALS -->
     <!-- Product Modal -->
     <div class="modal-overlay" id="productModal">
         <div class="modal">
-            <div class="modal-header">
-                <h2 id="modalProductName">Product Name</h2>
-                <button class="modal-close" onclick="window.closeModal()"><i class="fas fa-times"></i></button>
-            </div>
-            <div class="variant-section">
-                <h4><i class="fas fa-temperature-half"></i> Suhu</h4>
-                <div class="variant-options" id="suhuVariants"></div>
-            </div>
-            <div class="variant-section">
-                <h4><i class="fas fa-ruler"></i> Ukuran</h4>
-                <div class="variant-options" id="ukuranVariants"></div>
-            </div>
-            <div class="variant-section">
-                <h4><i class="fas fa-plus-circle"></i> Add-ons</h4>
-                <div id="addonsList"></div>
-            </div>
-            <div class="variant-section">
-                <h4><i class="fas fa-sticky-note"></i> Catatan</h4>
-                <textarea class="notes-input" id="modalNotes" placeholder="Less sugar, extra hot, dll..."></textarea>
-            </div>
+            <div class="modal-header"><h2 id="modalProductName">Product</h2><button class="modal-close" onclick="window.closeModal('productModal')"><i class="fas fa-times"></i></button></div>
+            <div class="variant-section"><h4><i class="fas fa-temperature-half"></i> Suhu</h4><div class="variant-options" id="suhuVariants"></div></div>
+            <div class="variant-section"><h4><i class="fas fa-ruler"></i> Ukuran</h4><div class="variant-options" id="ukuranVariants"></div></div>
+            <div class="variant-section"><h4><i class="fas fa-plus-circle"></i> Add-ons</h4><div id="addonsList"></div></div>
+            <div class="variant-section"><h4><i class="fas fa-sticky-note"></i> Catatan</h4><textarea class="notes-input" id="modalNotes" placeholder="Less sugar, extra hot..."></textarea></div>
             <div class="qty-selector">
                 <button onclick="window.changeQty(-1)"><i class="fas fa-minus"></i></button>
                 <span id="modalQty">1</span>
                 <button onclick="window.changeQty(1)"><i class="fas fa-plus"></i></button>
             </div>
-            <button class="add-to-cart-btn" onclick="window.addToCart()">Add to Order - <span id="modalTotal">Rp 0</span></button>
+            <button class="add-to-cart-btn" onclick="window.addToCart()">Tambah - <span id="modalTotal">Rp 0</span></button>
         </div>
     </div>
 
     <!-- Payment Modal -->
     <div class="modal-overlay" id="paymentModal">
         <div class="modal payment-modal">
-            <div class="modal-header">
-                <h2>Payment</h2>
-                <button class="modal-close" onclick="window.closePaymentModal()"><i class="fas fa-times"></i></button>
-            </div>
-            <div class="payment-amount">
-                <div class="amount-label">Total Amount</div>
-                <div class="amount-value" id="paymentTotal">Rp 0</div>
-            </div>
+            <div class="modal-header"><h2>Pembayaran</h2><button class="modal-close" onclick="window.closeModal('paymentModal')"><i class="fas fa-times"></i></button></div>
+            <div class="payment-amount"><div class="amount-label">Total</div><div class="amount-value" id="paymentTotal">Rp 0</div></div>
             <div class="payment-methods">
-                <button class="method-btn active" onclick="window.selectPaymentMethod('cash', this)"><i class="fas fa-money-bill-wave"></i> Cash</button>
-                <button class="method-btn" onclick="window.selectPaymentMethod('qris', this)"><i class="fas fa-qrcode"></i> QRIS</button>
-                <button class="method-btn" onclick="window.selectPaymentMethod('debit', this)"><i class="fas fa-credit-card"></i> Debit</button>
+                <button class="method-btn active" onclick="window.selectPaymentMethod('cash', this)"><i class="fas fa-money-bill-wave"></i>Cash</button>
+                <button class="method-btn" onclick="window.selectPaymentMethod('qris', this)"><i class="fas fa-qrcode"></i>QRIS</button>
+                <button class="method-btn" onclick="window.selectPaymentMethod('debit', this)"><i class="fas fa-credit-card"></i>Debit</button>
             </div>
             <div class="cash-input-section" id="cashInputSection">
-                <div class="input-group">
-                    <label>Uang Diterima</label>
-                    <input type="number" id="cashReceived" placeholder="0" oninput="window.calculateChange()">
-                </div>
+                <div class="input-group"><label>Uang Diterima</label><input type="number" id="cashReceived" placeholder="0" oninput="window.calculateChange()"></div>
                 <div class="quick-cash">
                     <button onclick="window.setQuickCash(50000)">50K</button>
                     <button onclick="window.setQuickCash(100000)">100K</button>
@@ -146,54 +376,79 @@
                     <button onclick="window.setQuickCash(500000)">500K</button>
                     <button onclick="window.setExactCash()">Uang Pas</button>
                 </div>
-                <div class="change-display">
-                    <div class="change-label">Kembalian</div>
-                    <div class="change-value" id="changeAmount">Rp 0</div>
-                </div>
+                <div class="change-display"><div class="change-label">Kembalian</div><div class="change-value" id="changeAmount">Rp 0</div></div>
             </div>
-            <button class="confirm-payment-btn" onclick="window.processPayment()">Confirm Payment</button>
+            <button class="confirm-payment-btn" onclick="window.processPayment()">Konfirmasi Pembayaran</button>
         </div>
     </div>
 
     <!-- Hold Orders Modal -->
     <div class="modal-overlay" id="holdModal">
-        <div class="modal">
-            <div class="modal-header">
-                <h2>Hold Orders</h2>
-                <button class="modal-close" onclick="window.closeHoldModal()"><i class="fas fa-times"></i></button>
-            </div>
-            <div class="hold-list" id="holdList">
-                <div class="empty-hold">No held orders</div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Report Modal -->
-    <div class="modal-overlay" id="reportModal">
-        <div class="modal report-modal">
-            <div class="modal-header">
-                <h2>Daily Report</h2>
-                <button class="modal-close" onclick="window.closeReportModal()"><i class="fas fa-times"></i></button>
-            </div>
-            <div class="report-content" id="reportContent">
-                <div class="loading">Loading report...</div>
-            </div>
-        </div>
+        <div class="modal"><div class="modal-header"><h2>Hold Orders</h2><button class="modal-close" onclick="window.closeModal('holdModal')"><i class="fas fa-times"></i></button></div><div class="hold-list" id="holdList"></div></div>
     </div>
 
     <!-- Receipt Modal -->
     <div class="modal-overlay" id="receiptModal">
         <div class="modal receipt-modal">
-            <div class="modal-header">
-                <h2>Receipt</h2>
-                <button class="modal-close" onclick="window.closeReceiptModal()"><i class="fas fa-times"></i></button>
-            </div>
+            <div class="modal-header"><h2>Struk</h2><button class="modal-close" onclick="window.closeModal('receiptModal')"><i class="fas fa-times"></i></button></div>
             <div class="receipt-content" id="receiptContent"></div>
-            <button class="print-btn" onclick="window.printReceipt()"><i class="fas fa-print"></i> Print Receipt</button>
+            <button class="print-btn" onclick="window.printReceipt()"><i class="fas fa-print"></i> Print</button>
         </div>
     </div>
 
-    <div class="toast" id="toast">Notification</div>
+    <!-- Product Form Modal -->
+    <div class="modal-overlay" id="productFormModal">
+        <div class="modal">
+            <div class="modal-header"><h2 id="productFormTitle">Tambah Produk</h2><button class="modal-close" onclick="window.closeModal('productFormModal')"><i class="fas fa-times"></i></button></div>
+            <input type="hidden" id="editProductId">
+            <div class="input-group"><label>Nama Produk</label><input type="text" id="editProductName"></div>
+            <div class="input-group"><label>Kategori</label><select id="editProductCategory"></select></div>
+            <div class="input-group"><label>Harga</label><input type="number" id="editProductPrice"></div>
+            <div class="input-group"><label>Deskripsi</label><textarea id="editProductDesc" class="notes-input"></textarea></div>
+            <button class="add-to-cart-btn" onclick="window.saveProduct()">Simpan</button>
+        </div>
+    </div>
+
+    <!-- Ingredient Form Modal -->
+    <div class="modal-overlay" id="ingredientFormModal">
+        <div class="modal">
+            <div class="modal-header"><h2 id="ingredientFormTitle">Tambah Bahan</h2><button class="modal-close" onclick="window.closeModal('ingredientFormModal')"><i class="fas fa-times"></i></button></div>
+            <input type="hidden" id="editIngredientId">
+            <div class="input-group"><label>Nama Bahan</label><input type="text" id="editIngredientName"></div>
+            <div class="input-group"><label>Stok</label><input type="number" id="editIngredientStock" step="0.01"></div>
+            <div class="input-group"><label>Satuan</label><input type="text" id="editIngredientUnit" placeholder="gram/ml/pcs"></div>
+            <div class="input-group"><label>Min. Stok</label><input type="number" id="editIngredientMin" step="0.01"></div>
+            <div class="input-group"><label>Harga Beli</label><input type="number" id="editIngredientPrice"></div>
+            <div class="input-group"><label>Supplier</label><input type="text" id="editIngredientSupplier"></div>
+            <button class="add-to-cart-btn" onclick="window.saveIngredient()">Simpan</button>
+        </div>
+    </div>
+
+    <!-- Transfer Modal -->
+    <div class="modal-overlay" id="transferModal">
+        <div class="modal">
+            <div class="modal-header"><h2>Transfer Kas</h2><button class="modal-close" onclick="window.closeModal('transferModal')"><i class="fas fa-times"></i></button></div>
+            <div class="input-group"><label>Dari</label><select id="transferFrom"></select></div>
+            <div class="input-group"><label>Ke</label><select id="transferTo"></select></div>
+            <div class="input-group"><label>Jumlah</label><input type="number" id="transferAmount"></div>
+            <div class="input-group"><label>Keterangan</label><input type="text" id="transferDesc"></div>
+            <button class="add-to-cart-btn" onclick="window.processTransfer()">Transfer</button>
+        </div>
+    </div>
+
+    <!-- Expense Modal -->
+    <div class="modal-overlay" id="expenseModal">
+        <div class="modal">
+            <div class="modal-header"><h2>Pengeluaran Kas</h2><button class="modal-close" onclick="window.closeModal('expenseModal')"><i class="fas fa-times"></i></button></div>
+            <div class="input-group"><label>Dari Sumber</label><select id="expenseSource"></select></div>
+            <div class="input-group"><label>Jumlah</label><input type="number" id="expenseAmount"></div>
+            <div class="input-group"><label>Kategori</label><input type="text" id="expenseCategory" placeholder="Beli es batu, dll"></div>
+            <div class="input-group"><label>Keterangan</label><input type="text" id="expenseDesc"></div>
+            <button class="add-to-cart-btn" onclick="window.processExpense()">Simpan</button>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
 
     <script src="main.js"></script>
 </body>
