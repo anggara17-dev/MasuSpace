@@ -115,5 +115,52 @@
     <div class="toast" id="toast">Notification</div>
 
     <script src="app.js"></script>
+
+    <!-- Modal Produk -->
+<div class="modal-overlay" id="productModal">
+    <div class="modal">
+        <div class="modal-header">
+            <h2 id="modalProductName">Product Name</h2>
+            <button class="modal-close" onclick="closeModal()"><i class="fas fa-times"></i></button>
+        </div>
+
+        <!-- Varian Suhu -->
+        <div class="variant-section">
+            <h4><i class="fas fa-temperature-half"></i> Suhu</h4>
+            <div class="variant-options" id="suhuVariants"></div>
+        </div>
+
+        <!-- Varian Ukuran -->
+        <div class="variant-section">
+            <h4><i class="fas fa-cup-togo"></i> Ukuran</h4>
+            <div class="variant-options" id="ukuranVariants"></div>
+        </div>
+
+        <!-- Add-ons -->
+        <div class="variant-section">
+            <h4><i class="fas fa-plus-circle"></i> Add-ons</h4>
+            <div id="addonsList"></div>
+        </div>
+
+        <!-- Catatan -->
+        <div class="variant-section">
+            <h4><i class="fas fa-note-sticky"></i> Catatan</h4>
+            <textarea class="notes-input" id="modalNotes" placeholder="Less sugar, extra hot, dll..."></textarea>
+        </div>
+
+        <!-- Quantity -->
+        <div class="qty-selector">
+            <button onclick="changeModalQty(-1)"><i class="fas fa-minus"></i></button>
+            <span id="modalQty">1</span>
+            <button onclick="changeModalQty(1)"><i class="fas fa-plus"></i></button>
+        </div>
+
+        <!-- Add to Cart -->
+        <button class="add-to-cart-btn" onclick="addToCartFromModal()">
+            Add to Order - <span id="modalTotal">Rp 0</span>
+        </button>
+    </div>
+</div>
+    
 </body>
 </html>
