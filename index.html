@@ -49,8 +49,8 @@
                 </div>
             </div>
             <div class="order-type-toggle">
-                <button class="type-btn active" onclick="setOrderType('dine_in', this)">Dine In</button>
-                <button class="type-btn" onclick="setOrderType('takeaway', this)">Take Away</button>
+                <button class="type-btn active" onclick="window.setOrderType('dine_in', this)">Dine In</button>
+                <button class="type-btn" onclick="window.setOrderType('takeaway', this)">Take Away</button>
             </div>
             <div class="customer-info">
                 <div class="input-group">
@@ -71,7 +71,7 @@
                 <div class="payment-row"><span>Tax (10%)</span><span id="tax">Rp 0</span></div>
                 <div class="payment-row total"><span>Total</span><span id="total">Rp 0</span></div>
             </div>
-            <button class="place-order-btn" id="placeOrderBtn" onclick="processCheckout()" disabled>
+            <button class="place-order-btn" id="placeOrderBtn" onclick="window.processCheckout()" disabled>
                 <span>Place Order</span>
                 <span id="btnTotal">Rp 0</span>
                 <i class="fas fa-arrow-right"></i>
@@ -81,12 +81,11 @@
 
     <div class="toast" id="toast">Notification</div>
 
-    <!-- Modal Produk (Dipastikan ada sebelum script dipanggil) -->
     <div class="modal-overlay" id="productModal">
         <div class="modal">
             <div class="modal-header">
                 <h2 id="modalProductName">Product Name</h2>
-                <button class="modal-close" onclick="closeModal()"><i class="fas fa-times"></i></button>
+                <button class="modal-close" onclick="window.closeModal()"><i class="fas fa-times"></i></button>
             </div>
             <div class="variant-section">
                 <h4><i class="fas fa-temperature-half"></i> Suhu</h4>
@@ -105,15 +104,14 @@
                 <textarea class="notes-input" id="modalNotes" placeholder="Less sugar, extra hot, dll..."></textarea>
             </div>
             <div class="qty-selector">
-                <button onclick="changeModalQty(-1)"><i class="fas fa-minus"></i></button>
+                <button onclick="window.changeQty(-1)"><i class="fas fa-minus"></i></button>
                 <span id="modalQty">1</span>
-                <button onclick="changeModalQty(1)"><i class="fas fa-plus"></i></button>
+                <button onclick="window.changeQty(1)"><i class="fas fa-plus"></i></button>
             </div>
-            <button class="add-to-cart-btn" onclick="addToCartFromModal()">Add to Order - <span id="modalTotal">Rp 0</span></button>
+            <button class="add-to-cart-btn" onclick="window.addToCart()">Add to Order - <span id="modalTotal">Rp 0</span></button>
         </div>
     </div>
     
-    <!-- Script dipanggil PALING AKHIR -->
     <script src="main.js"></script>
 </body>
 </html>
