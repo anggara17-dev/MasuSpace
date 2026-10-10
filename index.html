@@ -3,40 +3,55 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MasuSpace POS - Complete System</title>
+    <title>MasuSpace POS - Coffee Shop Management</title>
     <link rel="stylesheet" href="style.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
 <body>
 
     <!-- LOGIN PAGE -->
     <div id="loginPage" class="login-page">
+        <div class="login-bg-animation">
+            <div class="circle c1"></div>
+            <div class="circle c2"></div>
+            <div class="circle c3"></div>
+        </div>
         <div class="login-container">
-            <div class="login-logo">
-                <i class="fas fa-mug-hot"></i>
-                <h1>MASUSPACE</h1>
-                <p>Coffee Shop Management System</p>
-            </div>
-            <div class="login-form">
-                <h2>Masuk ke Sistem</h2>
-                <div class="pin-display" id="pinDisplay"></div>
-                <div class="pin-pad">
-                    <button onclick="window.addPin('1')">1</button>
-                    <button onclick="window.addPin('2')">2</button>
-                    <button onclick="window.addPin('3')">3</button>
-                    <button onclick="window.addPin('4')">4</button>
-                    <button onclick="window.addPin('5')">5</button>
-                    <button onclick="window.addPin('6')">6</button>
-                    <button onclick="window.addPin('7')">7</button>
-                    <button onclick="window.addPin('8')">8</button>
-                    <button onclick="window.addPin('9')">9</button>
-                    <button onclick="window.clearPin()" class="btn-clear">C</button>
-                    <button onclick="window.addPin('0')">0</button>
-                    <button onclick="window.submitPin()" class="btn-enter"><i class="fas fa-arrow-right"></i></button>
+            <div class="login-card">
+                <div class="login-header">
+                    <div class="logo-icon"><i class="fas fa-mug-hot"></i></div>
+                    <h1>MasuSpace</h1>
+                    <p>Coffee Shop Management System</p>
                 </div>
-                <p class="login-hint">PIN Default: <strong>1234</strong></p>
+                <form class="login-form" onsubmit="return window.handleLogin(event)">
+                    <div class="form-group">
+                        <label><i class="fas fa-user"></i> Username</label>
+                        <input type="text" id="loginUsername" placeholder="Masukkan username" required autocomplete="off">
+                    </div>
+                    <div class="form-group">
+                        <label><i class="fas fa-lock"></i> Password</label>
+                        <input type="password" id="loginPassword" placeholder="Masukkan password" required>
+                    </div>
+                    <div class="form-group">
+                        <label><i class="fas fa-user-tag"></i> Role</label>
+                        <select id="loginRole" required>
+                            <option value="">Pilih Role</option>
+                            <option value="owner">Owner</option>
+                            <option value="kasir">Kasir</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="login-btn">
+                        <span>Masuk</span>
+                        <i class="fas fa-arrow-right"></i>
+                    </button>
+                </form>
+                <div class="login-hint">
+                    <p><strong>Demo Account:</strong></p>
+                    <p>Owner: <code>owner</code> / <code>1234</code></p>
+                    <p>Kasir: <code>kasir1</code> / <code>1234</code></p>
+                </div>
             </div>
         </div>
     </div>
@@ -44,37 +59,44 @@
     <!-- MAIN APP -->
     <div id="mainApp" class="main-app" style="display:none;">
         <!-- Sidebar -->
-        <aside class="sidebar">
+        <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
-                <i class="fas fa-mug-hot"></i>
-                <span>MASUSPACE</span>
+                <div class="logo-icon small"><i class="fas fa-mug-hot"></i></div>
+                <span class="logo-text">MasuSpace</span>
+                <button class="sidebar-toggle" onclick="window.toggleSidebar()"><i class="fas fa-times"></i></button>
             </div>
             <nav class="sidebar-nav">
-                <button class="nav-item active" data-page="dashboard" onclick="window.navigate('dashboard')">
-                    <i class="fas fa-home"></i><span>Dashboard</span>
+                <button class="nav-item" data-page="dashboard" onclick="window.navigate('dashboard')">
+                    <i class="fas fa-chart-pie"></i><span>Dashboard</span>
                 </button>
                 <button class="nav-item" data-page="kasir" onclick="window.navigate('kasir')">
-                    <i class="fas fa-cash-register"></i><span>Kasir</span>
+                    <i class="fas fa-cash-register"></i><span>Kasir POS</span>
                 </button>
                 <button class="nav-item" data-page="orders" onclick="window.navigate('orders')">
                     <i class="fas fa-receipt"></i><span>Riwayat Order</span>
                 </button>
-                <button class="nav-item" data-page="products" onclick="window.navigate('products')">
+                <button class="nav-item owner-only" data-page="products" onclick="window.navigate('products')">
                     <i class="fas fa-coffee"></i><span>Daftar Menu</span>
                 </button>
                 <button class="nav-item" data-page="inventory" onclick="window.navigate('inventory')">
                     <i class="fas fa-boxes-stacked"></i><span>Inventory</span>
                 </button>
-                <button class="nav-item" data-page="cash" onclick="window.navigate('cash')">
+                <button class="nav-item owner-only" data-page="cash" onclick="window.navigate('cash')">
                     <i class="fas fa-wallet"></i><span>Kas & Bank</span>
                 </button>
-                <button class="nav-item" data-page="accounting" onclick="window.navigate('accounting')">
+                <button class="nav-item owner-only" data-page="expenses" onclick="window.navigate('expenses')">
+                    <i class="fas fa-file-invoice-dollar"></i><span>Pengeluaran</span>
+                </button>
+                <button class="nav-item owner-only" data-page="accounting" onclick="window.navigate('accounting')">
                     <i class="fas fa-book"></i><span>Akuntansi</span>
                 </button>
-                <button class="nav-item" data-page="reports" onclick="window.navigate('reports')">
+                <button class="nav-item owner-only" data-page="investors" onclick="window.navigate('investors')">
+                    <i class="fas fa-handshake"></i><span>Investor</span>
+                </button>
+                <button class="nav-item owner-only" data-page="reports" onclick="window.navigate('reports')">
                     <i class="fas fa-chart-line"></i><span>Laporan</span>
                 </button>
-                <button class="nav-item" data-page="settings" onclick="window.navigate('settings')">
+                <button class="nav-item owner-only" data-page="settings" onclick="window.navigate('settings')">
                     <i class="fas fa-cog"></i><span>Pengaturan</span>
                 </button>
             </nav>
@@ -87,51 +109,55 @@
 
         <!-- Main Content -->
         <main class="main-content">
-            <!-- Header -->
             <header class="app-header">
                 <div class="header-left">
-                    <h2 id="pageTitle">Dashboard</h2>
-                    <span class="header-date" id="headerDate"></span>
+                    <button class="menu-toggle" onclick="window.toggleSidebar()"><i class="fas fa-bars"></i></button>
+                    <div>
+                        <h2 id="pageTitle">Dashboard</h2>
+                        <span class="header-date" id="headerDate"></span>
+                    </div>
                 </div>
                 <div class="header-right">
+                    <div class="live-clock" id="liveClock"></div>
                     <div class="user-info">
-                        <div class="user-avatar">MS</div>
+                        <div class="user-avatar" id="userAvatar">O</div>
                         <div>
-                            <div class="user-name" id="userName">Admin</div>
+                            <div class="user-name" id="userName">Owner</div>
                             <div class="user-role" id="userRole">Administrator</div>
                         </div>
                     </div>
                 </div>
             </header>
 
-            <!-- Pages Container -->
             <div class="pages-container">
                 
-                <!-- DASHBOARD PAGE -->
+                <!-- DASHBOARD -->
                 <div id="page-dashboard" class="page active">
                     <div class="stats-grid">
-                        <div class="stat-card">
+                        <div class="stat-card animate-in">
                             <div class="stat-icon" style="background:#dbeafe;color:#2563eb"><i class="fas fa-shopping-bag"></i></div>
                             <div class="stat-info">
                                 <div class="stat-label">Order Hari Ini</div>
                                 <div class="stat-value" id="statOrders">0</div>
+                                <div class="stat-change" id="statOrdersChange">+0%</div>
                             </div>
                         </div>
-                        <div class="stat-card">
+                        <div class="stat-card animate-in">
                             <div class="stat-icon" style="background:#d1fae5;color:#059669"><i class="fas fa-money-bill-wave"></i></div>
                             <div class="stat-info">
                                 <div class="stat-label">Pendapatan</div>
                                 <div class="stat-value" id="statRevenue">Rp 0</div>
+                                <div class="stat-change" id="statRevenueChange">+0%</div>
                             </div>
                         </div>
-                        <div class="stat-card">
+                        <div class="stat-card animate-in">
                             <div class="stat-icon" style="background:#fef3c7;color:#d97706"><i class="fas fa-coins"></i></div>
                             <div class="stat-info">
                                 <div class="stat-label">Saldo Kasir</div>
                                 <div class="stat-value" id="statCash">Rp 0</div>
                             </div>
                         </div>
-                        <div class="stat-card">
+                        <div class="stat-card animate-in">
                             <div class="stat-icon" style="background:#fee2e2;color:#dc2626"><i class="fas fa-box"></i></div>
                             <div class="stat-info">
                                 <div class="stat-label">Stok Menipis</div>
@@ -140,18 +166,18 @@
                         </div>
                     </div>
                     <div class="dashboard-grid">
-                        <div class="dash-card">
+                        <div class="dash-card animate-in">
                             <h3><i class="fas fa-chart-pie"></i> Pembayaran Hari Ini</h3>
                             <div id="dashPaymentMethods" class="payment-breakdown"></div>
                         </div>
-                        <div class="dash-card">
+                        <div class="dash-card animate-in">
                             <h3><i class="fas fa-trophy"></i> Produk Terlaris</h3>
                             <div id="dashTopProducts" class="top-products"></div>
                         </div>
                     </div>
                 </div>
 
-                <!-- KASIR PAGE -->
+                <!-- KASIR -->
                 <div id="page-kasir" class="page">
                     <div class="kasir-layout">
                         <div class="kasir-left">
@@ -188,59 +214,60 @@
                             <div class="order-list" id="orderList">
                                 <div class="empty-order"><i class="fas fa-shopping-basket"></i><p>Belum ada item</p></div>
                             </div>
+                            <div class="discount-section">
+                                <button class="discount-btn" onclick="window.showDiscountModal()"><i class="fas fa-tag"></i> Diskon</button>
+                                <span id="discountDisplay" class="discount-display">Tidak ada diskon</span>
+                            </div>
                             <div class="payment-details">
                                 <div class="payment-row"><span>Subtotal</span><span id="subtotal">Rp 0</span></div>
+                                <div class="payment-row discount-row" id="discountRow" style="display:none"><span>Diskon</span><span id="discountAmount">- Rp 0</span></div>
                                 <div class="payment-row total"><span>Total</span><span id="total">Rp 0</span></div>
                             </div>
                             <button class="place-order-btn" id="placeOrderBtn" onclick="window.showPaymentModal()" disabled>
                                 <span>Bayar</span><span id="btnTotal">Rp 0</span><i class="fas fa-arrow-right"></i>
                             </button>
+                            <button class="daily-report-btn" onclick="window.showDailyReport()"><i class="fas fa-chart-bar"></i> Laporan Hari Ini</button>
                         </div>
                     </div>
                 </div>
 
-                <!-- ORDERS PAGE -->
+                <!-- ORDERS -->
                 <div id="page-orders" class="page">
                     <div class="page-header">
                         <h2>Riwayat Order</h2>
                         <div class="filter-group">
                             <input type="date" id="orderFilterDate" onchange="window.loadOrders()">
-                            <button class="btn-primary" onclick="window.loadOrders()"><i class="fas fa-filter"></i> Filter</button>
+                            <button class="btn-secondary" onclick="document.getElementById('orderFilterDate').value='';window.loadOrders()"><i class="fas fa-redo"></i> Reset</button>
                         </div>
                     </div>
                     <div class="orders-summary" id="ordersSummary"></div>
                     <div class="table-container">
-                        <table class="data-table" id="ordersTable">
-                            <thead><tr><th>No. Order</th><th>Tanggal</th><th>Tipe</th><th>Customer</th><th>Metode</th><th>Total</th><th>Status</th><th>Aksi</th></tr></thead>
+                        <table class="data-table">
+                            <thead><tr><th>No. Order</th><th>Tanggal</th><th>Tipe</th><th>Customer</th><th>Kasir</th><th>Metode</th><th>Total</th><th>Status</th><th>Aksi</th></tr></thead>
                             <tbody id="ordersTableBody"></tbody>
                         </table>
                     </div>
                 </div>
 
-                <!-- PRODUCTS PAGE -->
+                <!-- PRODUCTS -->
                 <div id="page-products" class="page">
                     <div class="page-header">
                         <h2>Daftar Menu</h2>
                         <button class="btn-primary" onclick="window.showProductForm()"><i class="fas fa-plus"></i> Tambah Produk</button>
                     </div>
-                    <div class="tabs">
-                        <button class="tab active" onclick="window.switchProductTab('products', this)">Produk</button>
-                        <button class="tab" onclick="window.switchProductTab('categories', this)">Kategori</button>
-                        <button class="tab" onclick="window.switchProductTab('addons', this)">Add-ons</button>
-                    </div>
                     <div class="table-container">
-                        <table class="data-table" id="productsTable">
+                        <table class="data-table">
                             <thead><tr><th>Nama</th><th>Kategori</th><th>Harga</th><th>Status</th><th>Aksi</th></tr></thead>
                             <tbody id="productsTableBody"></tbody>
                         </table>
                     </div>
                 </div>
 
-                <!-- INVENTORY PAGE -->
+                <!-- INVENTORY -->
                 <div id="page-inventory" class="page">
                     <div class="page-header">
                         <h2>Inventory & Bahan Baku</h2>
-                        <button class="btn-primary" onclick="window.showIngredientForm()"><i class="fas fa-plus"></i> Tambah Bahan</button>
+                        <button class="btn-primary owner-only" onclick="window.showIngredientForm()"><i class="fas fa-plus"></i> Tambah Bahan</button>
                     </div>
                     <div class="stats-grid">
                         <div class="stat-card"><div class="stat-info"><div class="stat-label">Total Bahan</div><div class="stat-value" id="invTotal">0</div></div></div>
@@ -250,19 +277,18 @@
                     </div>
                     <div class="table-container">
                         <table class="data-table">
-                            <thead><tr><th>Nama Bahan</th><th>Stok</th><th>Min. Stok</th><th>Satuan</th><th>Harga Beli</th><th>Status</th><th>Aksi</th></tr></thead>
+                            <thead><tr><th>Nama Bahan</th><th>Stok</th><th>Min. Stok</th><th>Satuan</th><th>Harga Beli</th><th>Supplier</th><th>Status</th><th class="owner-only">Aksi</th></tr></thead>
                             <tbody id="ingredientsTableBody"></tbody>
                         </table>
                     </div>
                 </div>
 
-                <!-- CASH PAGE -->
+                <!-- CASH -->
                 <div id="page-cash" class="page">
                     <div class="page-header">
                         <h2>Kas & Bank</h2>
                         <div class="filter-group">
                             <button class="btn-primary" onclick="window.showTransferModal()"><i class="fas fa-exchange-alt"></i> Transfer</button>
-                            <button class="btn-primary" onclick="window.showExpenseModal()"><i class="fas fa-minus-circle"></i> Pengeluaran</button>
                         </div>
                     </div>
                     <div class="cash-sources-grid" id="cashSourcesGrid"></div>
@@ -277,7 +303,26 @@
                     </div>
                 </div>
 
-                <!-- ACCOUNTING PAGE -->
+                <!-- EXPENSES -->
+                <div id="page-expenses" class="page">
+                    <div class="page-header">
+                        <h2>Pengeluaran Kas</h2>
+                        <button class="btn-primary" onclick="window.showExpenseModal()"><i class="fas fa-plus"></i> Tambah Pengeluaran</button>
+                    </div>
+                    <div class="stats-grid">
+                        <div class="stat-card"><div class="stat-info"><div class="stat-label">Pengeluaran Hari Ini</div><div class="stat-value" id="expToday">Rp 0</div></div></div>
+                        <div class="stat-card"><div class="stat-info"><div class="stat-label">Minggu Ini</div><div class="stat-value" id="expWeek">Rp 0</div></div></div>
+                        <div class="stat-card"><div class="stat-info"><div class="stat-label">Bulan Ini</div><div class="stat-value" id="expMonth">Rp 0</div></div></div>
+                    </div>
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead><tr><th>Tanggal</th><th>Kategori</th><th>Deskripsi</th><th>Dari</th><th>Jumlah</th></tr></thead>
+                            <tbody id="expensesTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- ACCOUNTING -->
                 <div id="page-accounting" class="page">
                     <div class="tabs">
                         <button class="tab active" onclick="window.switchAccountingTab('journal', this)">Jurnal</button>
@@ -287,13 +332,44 @@
                     <div id="accountingContent"></div>
                 </div>
 
-                <!-- REPORTS PAGE -->
+                <!-- INVESTORS -->
+                <div id="page-investors" class="page">
+                    <div class="page-header">
+                        <h2>Pengelolaan Investor</h2>
+                        <button class="btn-primary" onclick="window.showInvestorForm()"><i class="fas fa-plus"></i> Tambah Investor</button>
+                    </div>
+                    <div class="investor-info-card">
+                        <h3><i class="fas fa-info-circle"></i> Skema Bagi Hasil</h3>
+                        <p>Investor: <strong>70%</strong> dari Laba Bersih | Pengelola: <strong>30%</strong> dari Laba Bersih</p>
+                        <p style="font-size:12px;color:var(--text-light);margin-top:8px">Laba Bersih = Total Pendapatan - Total Pengeluaran</p>
+                    </div>
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead><tr><th>Nama Investor</th><th>Modal</th><th>Share %</th><th>Status</th><th>Aksi</th></tr></thead>
+                            <tbody id="investorsTableBody"></tbody>
+                        </table>
+                    </div>
+                    <div class="page-section">
+                        <h3><i class="fas fa-calculator"></i> Hitung Bagi Hasil</h3>
+                        <div class="profit-calc-form">
+                            <div class="input-group"><label>Tanggal Mulai</label><input type="date" id="psStart"></div>
+                            <div class="input-group"><label>Tanggal Akhir</label><input type="date" id="psEnd"></div>
+                            <button class="btn-primary" onclick="window.calculateProfitSharing()"><i class="fas fa-calculator"></i> Hitung</button>
+                        </div>
+                        <div id="profitResult" class="profit-result"></div>
+                    </div>
+                </div>
+
+                <!-- REPORTS -->
                 <div id="page-reports" class="page">
                     <div class="page-header">
                         <h2>Laporan Penjualan</h2>
                         <div class="filter-group">
                             <input type="date" id="reportStartDate">
                             <input type="date" id="reportEndDate">
+                            <button class="btn-secondary" onclick="window.setReportPreset('today')">Hari Ini</button>
+                            <button class="btn-secondary" onclick="window.setReportPreset('week')">7 Hari</button>
+                            <button class="btn-secondary" onclick="window.setReportPreset('month')">Bulan Ini</button>
                             <button class="btn-primary" onclick="window.loadSalesReport()"><i class="fas fa-chart-bar"></i> Generate</button>
                         </div>
                     </div>
@@ -306,13 +382,13 @@
                     </div>
                 </div>
 
-                <!-- SETTINGS PAGE -->
+                <!-- SETTINGS -->
                 <div id="page-settings" class="page">
                     <div class="page-header"><h2>Pengaturan</h2></div>
                     <div class="settings-grid">
                         <div class="settings-card">
                             <h3><i class="fas fa-store"></i> Info Toko</h3>
-                            <div class="input-group"><label>Nama Toko</label><input type="text" id="settingStoreName" value="MasuSpace"></div>
+                            <div class="input-group"><label>Nama Toko</label><input type="text" id="settingStoreName"></div>
                             <div class="input-group"><label>Alamat</label><input type="text" id="settingAddress"></div>
                             <div class="input-group"><label>Telepon</label><input type="text" id="settingPhone"></div>
                             <div class="input-group"><label>Email</label><input type="email" id="settingEmail"></div>
@@ -325,11 +401,6 @@
                             </div>
                             <div class="input-group"><label>Rate (%)</label><input type="number" id="settingTaxRate" value="0"></div>
                             <button class="btn-primary" onclick="window.saveSettings()">Simpan</button>
-                        </div>
-                        <div class="settings-card">
-                            <h3><i class="fas fa-key"></i> Ganti PIN</h3>
-                            <div class="input-group"><label>PIN Baru (4 digit)</label><input type="password" id="newPin" maxlength="4"></div>
-                            <button class="btn-primary" onclick="window.changePin()">Update PIN</button>
                         </div>
                     </div>
                 </div>
@@ -382,6 +453,25 @@
         </div>
     </div>
 
+    <!-- Discount Modal -->
+    <div class="modal-overlay" id="discountModal">
+        <div class="modal">
+            <div class="modal-header"><h2>Diskon</h2><button class="modal-close" onclick="window.closeModal('discountModal')"><i class="fas fa-times"></i></button></div>
+            <div class="discount-type-toggle">
+                <button class="disc-type-btn active" onclick="window.setDiscountType('percent', this)">Persen (%)</button>
+                <button class="disc-type-btn" onclick="window.setDiscountType('fixed', this)">Nominal (Rp)</button>
+            </div>
+            <div class="input-group"><label id="discountLabel">Diskon (%)</label><input type="number" id="discountValue" placeholder="0" oninput="window.previewDiscount()"></div>
+            <div class="discount-preview">
+                <div>Subtotal: <span id="discSubtotal">Rp 0</span></div>
+                <div>Diskon: <span id="discAmount">- Rp 0</span></div>
+                <div class="total-preview">Total: <span id="discTotal">Rp 0</span></div>
+            </div>
+            <button class="add-to-cart-btn" onclick="window.applyDiscount()">Terapkan Diskon</button>
+            <button class="btn-secondary full-width" onclick="window.removeDiscount()" style="margin-top:8px">Hapus Diskon</button>
+        </div>
+    </div>
+
     <!-- Hold Orders Modal -->
     <div class="modal-overlay" id="holdModal">
         <div class="modal"><div class="modal-header"><h2>Hold Orders</h2><button class="modal-close" onclick="window.closeModal('holdModal')"><i class="fas fa-times"></i></button></div><div class="hold-list" id="holdList"></div></div>
@@ -393,6 +483,14 @@
             <div class="modal-header"><h2>Struk</h2><button class="modal-close" onclick="window.closeModal('receiptModal')"><i class="fas fa-times"></i></button></div>
             <div class="receipt-content" id="receiptContent"></div>
             <button class="print-btn" onclick="window.printReceipt()"><i class="fas fa-print"></i> Print</button>
+        </div>
+    </div>
+
+    <!-- Daily Report Modal (Kasir) -->
+    <div class="modal-overlay" id="dailyReportModal">
+        <div class="modal report-modal">
+            <div class="modal-header"><h2>Laporan Hari Ini</h2><button class="modal-close" onclick="window.closeModal('dailyReportModal')"><i class="fas fa-times"></i></button></div>
+            <div id="dailyReportContent"></div>
         </div>
     </div>
 
@@ -439,12 +537,34 @@
     <!-- Expense Modal -->
     <div class="modal-overlay" id="expenseModal">
         <div class="modal">
-            <div class="modal-header"><h2>Pengeluaran Kas</h2><button class="modal-close" onclick="window.closeModal('expenseModal')"><i class="fas fa-times"></i></button></div>
+            <div class="modal-header"><h2>Tambah Pengeluaran</h2><button class="modal-close" onclick="window.closeModal('expenseModal')"><i class="fas fa-times"></i></button></div>
             <div class="input-group"><label>Dari Sumber</label><select id="expenseSource"></select></div>
+            <div class="input-group"><label>Kategori</label>
+                <select id="expenseCategory">
+                    <option value="Beli Bahan">Beli Bahan Baku</option>
+                    <option value="Beli Es Batu">Beli Es Batu</option>
+                    <option value="Listrik">Listrik</option>
+                    <option value="Air">Air</option>
+                    <option value="Sewa">Sewa</option>
+                    <option value="Gaji">Gaji Karyawan</option>
+                    <option value="Lainnya">Lainnya</option>
+                </select>
+            </div>
             <div class="input-group"><label>Jumlah</label><input type="number" id="expenseAmount"></div>
-            <div class="input-group"><label>Kategori</label><input type="text" id="expenseCategory" placeholder="Beli es batu, dll"></div>
             <div class="input-group"><label>Keterangan</label><input type="text" id="expenseDesc"></div>
             <button class="add-to-cart-btn" onclick="window.processExpense()">Simpan</button>
+        </div>
+    </div>
+
+    <!-- Investor Form Modal -->
+    <div class="modal-overlay" id="investorFormModal">
+        <div class="modal">
+            <div class="modal-header"><h2 id="investorFormTitle">Tambah Investor</h2><button class="modal-close" onclick="window.closeModal('investorFormModal')"><i class="fas fa-times"></i></button></div>
+            <input type="hidden" id="editInvestorId">
+            <div class="input-group"><label>Nama Investor</label><input type="text" id="editInvestorName"></div>
+            <div class="input-group"><label>Modal (Rp)</label><input type="number" id="editInvestorCapital"></div>
+            <div class="input-group"><label>Share (%)</label><input type="number" id="editInvestorShare" step="0.01"></div>
+            <button class="add-to-cart-btn" onclick="window.saveInvestor()">Simpan</button>
         </div>
     </div>
 
