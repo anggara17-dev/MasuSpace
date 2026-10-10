@@ -23,31 +23,14 @@
                 <p class="login-desc">Sistem kasir lengkap untuk manajemen coffee shop modern</p>
                 
                 <div class="login-features">
-                    <div class="feature-item">
-                        <i class="fas fa-cash-register"></i>
-                        <span>Point of Sale (POS)</span>
-                    </div>
-                    <div class="feature-item">
-                        <i class="fas fa-chart-line"></i>
-                        <span>Laporan & Analitik</span>
-                    </div>
-                    <div class="feature-item">
-                        <i class="fas fa-boxes-stacked"></i>
-                        <span>Inventory Management</span>
-                    </div>
-                    <div class="feature-item">
-                        <i class="fas fa-handshake"></i>
-                        <span>Pengelolaan Investor</span>
-                    </div>
-                    <div class="feature-item">
-                        <i class="fas fa-wallet"></i>
-                        <span>Kas & Akuntansi</span>
-                    </div>
+                    <div class="feature-item"><i class="fas fa-cash-register"></i><span>Point of Sale (POS)</span></div>
+                    <div class="feature-item"><i class="fas fa-chart-line"></i><span>Laporan & Analitik</span></div>
+                    <div class="feature-item"><i class="fas fa-boxes-stacked"></i><span>Inventory Management</span></div>
+                    <div class="feature-item"><i class="fas fa-handshake"></i><span>Pengelolaan Investor</span></div>
+                    <div class="feature-item"><i class="fas fa-vault"></i><span>Kas & Akuntansi</span></div>
                 </div>
                 
-                <div class="login-footer-left">
-                    MASUSPACE POS — Design & Develop by MasuSpace Team
-                </div>
+                <div class="login-footer-left">MASUSPACE POS — Design & Develop by MasuSpace Team</div>
             </div>
         </div>
         
@@ -170,7 +153,7 @@
                                     <div class="user-role" id="userRole2">Administrator</div>
                                 </div>
                             </div>
-                            <button class="dropdown-item" onclick="window.navigate('settings')">
+                            <button class="dropdown-item" onclick="window.navigate('settings'); window.closeUserMenu();">
                                 <i class="fas fa-user-gear"></i> Profil Saya
                             </button>
                             <button class="dropdown-item logout" onclick="window.logout()">
@@ -187,43 +170,42 @@
                 <div id="page-dashboard" class="page active">
                     <div class="stats-grid">
                         <div class="stat-card">
-                            <div class="stat-icon" style="background:#dbeafe;color:#2563eb"><i class="fas fa-shopping-bag"></i></div>
+                            <div class="stat-icon"><i class="fas fa-shopping-bag"></i></div>
                             <div class="stat-info">
                                 <div class="stat-label">Order Hari Ini</div>
                                 <div class="stat-value" id="statOrders">0</div>
-                                <div class="stat-change" id="statOrdersChange">+0%</div>
                             </div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-icon" style="background:#d1fae5;color:#059669"><i class="fas fa-money-bill-wave"></i></div>
+                            <div class="stat-icon"><i class="fas fa-money-bill-wave"></i></div>
                             <div class="stat-info">
                                 <div class="stat-label">Pendapatan</div>
                                 <div class="stat-value" id="statRevenue">Rp 0</div>
                             </div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-icon" style="background:#fee2e2;color:#dc2626"><i class="fas fa-arrow-trend-down"></i></div>
+                            <div class="stat-icon"><i class="fas fa-arrow-trend-down"></i></div>
                             <div class="stat-info">
                                 <div class="stat-label">Pengeluaran</div>
                                 <div class="stat-value" id="statExpense">Rp 0</div>
                             </div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-icon" style="background:#fef3c7;color:#d97706"><i class="fas fa-coins"></i></div>
+                            <div class="stat-icon"><i class="fas fa-coins"></i></div>
                             <div class="stat-info">
                                 <div class="stat-label">Laba Bersih</div>
                                 <div class="stat-value" id="statProfit">Rp 0</div>
                             </div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-icon" style="background:#e0e7ff;color:#4f46e5"><i class="fas fa-vault"></i></div>
+                            <div class="stat-icon"><i class="fas fa-vault"></i></div>
                             <div class="stat-info">
                                 <div class="stat-label">Saldo Kasir</div>
                                 <div class="stat-value" id="statCash">Rp 0</div>
                             </div>
                         </div>
                         <div class="stat-card">
-                            <div class="stat-icon" style="background:#fce7f3;color:#db2777"><i class="fas fa-box"></i></div>
+                            <div class="stat-icon"><i class="fas fa-box"></i></div>
                             <div class="stat-info">
                                 <div class="stat-label">Stok Menipis</div>
                                 <div class="stat-value" id="statLowStock">0</div>
@@ -293,6 +275,14 @@
                                 </div>
                             </div>
                             
+                            <!-- Riwayat Pengeluaran Kasir -->
+                            <div class="kasir-expense-history">
+                                <div class="section-title"><i class="fas fa-clock-rotate-left"></i> Riwayat Pengeluaran Hari Ini</div>
+                                <div class="expense-history-list" id="kasirExpenseHistory">
+                                    <div class="empty-history">Belum ada pengeluaran</div>
+                                </div>
+                            </div>
+                            
                             <div class="order-list-header">Item Order</div>
                             <div class="order-list" id="orderList">
                                 <div class="empty-order"><i class="fas fa-shopping-basket"></i><p>Belum ada item</p></div>
@@ -320,12 +310,12 @@
                         <h2>Riwayat Order</h2>
                         <div class="filter-group">
                             <div class="date-range-filter">
-                                <i class="fas fa-calendar"></i>
+                                <i class="fas fa-calendar-days"></i>
                                 <input type="date" id="orderFilterStart">
                                 <span>s/d</span>
                                 <input type="date" id="orderFilterEnd">
                             </div>
-                            <button class="btn-secondary" onclick="window.resetOrderFilter()"><i class="fas fa-redo"></i> Reset</button>
+                            <button class="btn-secondary" onclick="window.resetOrderFilter()"><i class="fas fa-rotate-right"></i> Reset</button>
                         </div>
                     </div>
                     <div class="orders-summary" id="ordersSummary"></div>
@@ -384,7 +374,7 @@
                         <h3><i class="fas fa-clock-rotate-left"></i> Riwayat Mutasi Kas</h3>
                         <div class="filter-group" style="margin-bottom:12px">
                             <div class="date-range-filter">
-                                <i class="fas fa-calendar"></i>
+                                <i class="fas fa-calendar-days"></i>
                                 <input type="date" id="cashFilterStart">
                                 <span>s/d</span>
                                 <input type="date" id="cashFilterEnd">
@@ -431,7 +421,7 @@
                         <h3><i class="fas fa-calculator"></i> Hitung Bagi Hasil</h3>
                         <div class="profit-calc-form">
                             <div class="input-group"><label>Periode</label>
-                                <select id="psPeriod">
+                                <select id="psPeriod" onchange="window.setProfitPeriod()">
                                     <option value="custom">Custom</option>
                                     <option value="month">Bulan Ini</option>
                                     <option value="quarter">Kuartal Ini</option>
@@ -451,7 +441,7 @@
                         <h2>Laporan Penjualan</h2>
                         <div class="filter-group">
                             <div class="date-range-filter">
-                                <i class="fas fa-calendar"></i>
+                                <i class="fas fa-calendar-days"></i>
                                 <input type="date" id="reportStartDate">
                                 <span>s/d</span>
                                 <input type="date" id="reportEndDate">
