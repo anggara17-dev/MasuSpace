@@ -131,63 +131,59 @@
                 </div>
 
                 <!-- KASIR -->
-                <div id="page-kasir" class="page">
-                    <div class="kasir-layout">
-                        <div class="kasir-left">
-                            <!-- PENGELUARAN KASIR DI ATAS (FIX #1) -->
-                            <div class="kasir-top-bar">
-                                <div class="quick-expense-section">
-                                    <div class="section-title"><i class="fas fa-minus-circle"></i> Pengeluaran Kasir Cepat</div>
-                                    <div class="quick-expense-form">
-                                        <select id="quickExpenseSource"><option value="">Sumber Kas</option></select>
-                                        <input type="number" id="quickExpenseAmount" placeholder="Jumlah (Rp)">
-                                        <select id="quickExpenseCategory">
-                                            <option value="Beli Es Batu">Es Batu</option>
-                                            <option value="Beli Bahan">Bahan Baku</option>
-                                            <option value="Lainnya">Lainnya</option>
-                                        </select>
-                                        <button class="btn-expense" onclick="window.quickExpense()"><i class="fas fa-plus"></i></button>
-                                    </div>
-                                </div>
-                                <div class="kasir-expense-history">
-                                    <div class="section-title"><i class="fas fa-clock-rotate-left"></i> Riwayat Pengeluaran Hari Ini</div>
-                                    <div class="expense-history-list" id="kasirExpenseHistory"><div class="empty-history">Belum ada pengeluaran</div></div>
-                                </div>
-                            </div>
-                            
-                            <div class="search-bar"><i class="fas fa-search"></i><input type="text" placeholder="Cari menu..." id="searchInput"></div>
-                            <div class="categories" id="categoriesContainer"></div>
-                            <div class="products-grid" id="productsGrid"></div>
-                        </div>
-                        <div class="kasir-right">
-                            <div class="order-header">
-                                <div><h3>Order Aktif</h3><p id="orderNumber">#NEW</p></div>
-                                <button class="btn-hold" onclick="window.showHoldOrders()" title="Hold"><i class="fas fa-pause"></i></button>
-                            </div>
-                            <div class="order-type-toggle">
-                                <button class="type-btn active" onclick="window.setOrderType('dine_in', this)">Dine In</button>
-                                <button class="type-btn" onclick="window.setOrderType('takeaway', this)">Take Away</button>
-                            </div>
-                            <div class="customer-info">
-                                <div class="input-group"><label>Nama</label><input type="text" id="customerName" placeholder="Customer"></div>
-                                <div class="input-group"><label>Meja</label><input type="text" id="tableNumber" placeholder="Table 1"></div>
-                            </div>
-                            <div class="order-list-header">Item Order</div>
-                            <div class="order-list" id="orderList"><div class="empty-order"><i class="fas fa-shopping-basket"></i><p>Belum ada item</p></div></div>
-                            <div class="discount-section">
-                                <button class="discount-btn" onclick="window.showDiscountModal()"><i class="fas fa-tag"></i> Diskon</button>
-                                <span id="discountDisplay" class="discount-display">Tidak ada diskon</span>
-                            </div>
-                            <div class="payment-details">
-                                <div class="payment-row"><span>Subtotal</span><span id="subtotal">Rp 0</span></div>
-                                <div class="payment-row discount-row" id="discountRow" style="display:none"><span>Diskon</span><span id="discountAmount">- Rp 0</span></div>
-                                <div class="payment-row total"><span>Total</span><span id="total">Rp 0</span></div>
-                            </div>
-                            <button class="place-order-btn" id="placeOrderBtn" onclick="window.showPaymentModal()" disabled><span>Bayar</span><span id="btnTotal">Rp 0</span><i class="fas fa-arrow-right"></i></button>
-                            <button class="daily-report-btn" onclick="window.showDailyReport()"><i class="fas fa-chart-bar"></i> Laporan Hari Ini</button>
-                        </div>
+<div id="page-kasir" class="page">
+    <div class="kasir-layout">
+        <div class="kasir-left">
+            <!-- Pengeluaran Kasir di Atas (FIX #1 & #2) -->
+            <div class="kasir-top-bar">
+                <div class="quick-expense-section">
+                    <div class="section-title"><i class="fas fa-minus-circle"></i> Pengeluaran Kasir Cepat</div>
+                    <div class="quick-expense-form">
+                        <select id="quickExpenseSource"><option value="">Sumber Kas</option></select>
+                        <input type="number" id="quickExpenseAmount" placeholder="Jumlah (Rp)">
+                        <input type="text" id="quickExpenseDesc" placeholder="Keterangan (manual)">
+                        <button class="btn-expense" onclick="window.quickExpense()"><i class="fas fa-plus"></i></button>
                     </div>
                 </div>
+                <button class="btn-expense-history" onclick="window.showExpenseHistoryModal()">
+                    <i class="fas fa-clock-rotate-left"></i> Riwayat Pengeluaran Hari Ini 
+                    <span class="expense-count" id="expenseCountBadge">0</span>
+                </button>
+            </div>
+            
+            <div class="search-bar"><i class="fas fa-search"></i><input type="text" placeholder="Cari menu..." id="searchInput"></div>
+            <div class="categories" id="categoriesContainer"></div>
+            <div class="products-grid" id="productsGrid"></div>
+        </div>
+        <div class="kasir-right">
+            <div class="order-header">
+                <div><h3>Order Aktif</h3><p id="orderNumber">#NEW</p></div>
+                <button class="btn-hold" onclick="window.showHoldOrders()" title="Hold"><i class="fas fa-pause"></i></button>
+            </div>
+            <div class="order-type-toggle">
+                <button class="type-btn active" onclick="window.setOrderType('dine_in', this)">Dine In</button>
+                <button class="type-btn" onclick="window.setOrderType('takeaway', this)">Take Away</button>
+            </div>
+            <div class="customer-info">
+                <div class="input-group"><label>Nama</label><input type="text" id="customerName" placeholder="Customer"></div>
+                <div class="input-group"><label>Meja</label><input type="text" id="tableNumber" placeholder="Table 1"></div>
+            </div>
+            <div class="order-list-header">Item Order</div>
+            <div class="order-list" id="orderList"><div class="empty-order"><i class="fas fa-shopping-basket"></i><p>Belum ada item</p></div></div>
+            <div class="discount-section">
+                <button class="discount-btn" onclick="window.showDiscountModal()"><i class="fas fa-tag"></i> Diskon</button>
+                <span id="discountDisplay" class="discount-display">Tidak ada diskon</span>
+            </div>
+            <div class="payment-details">
+                <div class="payment-row"><span>Subtotal</span><span id="subtotal">Rp 0</span></div>
+                <div class="payment-row discount-row" id="discountRow" style="display:none"><span>Diskon</span><span id="discountAmount">- Rp 0</span></div>
+                <div class="payment-row total"><span>Total</span><span id="total">Rp 0</span></div>
+            </div>
+            <button class="place-order-btn" id="placeOrderBtn" onclick="window.showPaymentModal()" disabled><span>Bayar</span><span id="btnTotal">Rp 0</span><i class="fas fa-arrow-right"></i></button>
+            <button class="daily-report-btn" onclick="window.showDailyReport()"><i class="fas fa-chart-bar"></i> Laporan Hari Ini</button>
+        </div>
+    </div>
+</div>
 
                 <!-- ORDERS -->
                 <div id="page-orders" class="page">
@@ -506,5 +502,39 @@
     <div class="toast" id="toast"></div>
 
     <script src="main.js"></script>
+<!-- Expense History Modal (FIX #2) -->
+<div class="modal-overlay" id="expenseHistoryModal">
+    <div class="modal" style="max-width:500px">
+        <div class="modal-header"><h2>Riwayat Pengeluaran Hari Ini</h2><button class="modal-close" onclick="window.closeModal('expenseHistoryModal')"><i class="fas fa-xmark"></i></button></div>
+        <div id="expenseHistoryContent"></div>
+    </div>
+</div>
+
+<!-- Order Detail/Print Modal (FIX #3) -->
+<div class="modal-overlay" id="orderDetailModal">
+    <div class="modal receipt-modal">
+        <div class="modal-header"><h2>Detail Order</h2><button class="modal-close" onclick="window.closeModal('orderDetailModal')"><i class="fas fa-xmark"></i></button></div>
+        <div class="receipt-content" id="orderDetailContent"></div>
+        <div style="display:flex;gap:8px">
+            <button class="print-btn" onclick="window.printOrderDetail()"><i class="fas fa-print"></i> Cetak</button>
+            <button class="btn-secondary" onclick="window.closeModal('orderDetailModal')" style="flex:1">Tutup</button>
+        </div>
+    </div>
+</div>
+
+<!-- Profile Photo Upload Modal (FIX #6) -->
+<div class="modal-overlay" id="photoUploadModal">
+    <div class="modal">
+        <div class="modal-header"><h2>Upload Foto Profil</h2><button class="modal-close" onclick="window.closeModal('photoUploadModal')"><i class="fas fa-xmark"></i></button></div>
+        <div class="photo-upload-section">
+            <div class="profile-photo-preview" id="photoUploadPreview">
+                <i class="fas fa-user"></i>
+            </div>
+            <input type="file" id="photoFileInput" accept="image/*" onchange="window.handlePhotoUpload(event)" style="margin-top:12px">
+            <p style="font-size:12px;color:var(--text-light);margin-top:8px">Format: JPG, PNG. Maksimal 2MB.</p>
+        </div>
+        <button class="add-to-cart-btn" onclick="window.saveUploadedPhoto()">Simpan Foto</button>
+    </div>
+</div>
 </body>
 </html>
