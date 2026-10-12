@@ -130,11 +130,10 @@
                     </div>
                 </div>
 
-                <!-- KASIR -->
+               <!-- KASIR -->
 <div id="page-kasir" class="page">
     <div class="kasir-layout">
         <div class="kasir-left">
-            <!-- Pengeluaran Kasir di Atas (FIX #1 & #2) -->
             <div class="kasir-top-bar">
                 <div class="quick-expense-section">
                     <div class="section-title"><i class="fas fa-minus-circle"></i> Pengeluaran Kasir Cepat</div>
@@ -170,10 +169,22 @@
             </div>
             <div class="order-list-header">Item Order</div>
             <div class="order-list" id="orderList"><div class="empty-order"><i class="fas fa-shopping-basket"></i><p>Belum ada item</p></div></div>
-            <div class="discount-section">
-                <button class="discount-btn" onclick="window.showDiscountModal()"><i class="fas fa-tag"></i> Diskon</button>
-                <span id="discountDisplay" class="discount-display">Tidak ada diskon</span>
+            
+            <!-- FIX #2: Diskon Inline (bukan popup) -->
+            <div class="discount-inline-section">
+                <div class="discount-inline-row">
+                    <label style="font-size:11px;font-weight:700;color:var(--text-light);text-transform:uppercase">Diskon</label>
+                    <div class="discount-inline-controls">
+                        <select id="discountTypeInline" onchange="window.applyInlineDiscount()">
+                            <option value="none">Tidak ada</option>
+                            <option value="percent">Persen (%)</option>
+                            <option value="fixed">Nominal (Rp)</option>
+                        </select>
+                        <input type="number" id="discountValueInline" placeholder="0" oninput="window.applyInlineDiscount()">
+                    </div>
+                </div>
             </div>
+            
             <div class="payment-details">
                 <div class="payment-row"><span>Subtotal</span><span id="subtotal">Rp 0</span></div>
                 <div class="payment-row discount-row" id="discountRow" style="display:none"><span>Diskon</span><span id="discountAmount">- Rp 0</span></div>
@@ -536,5 +547,41 @@
         <button class="add-to-cart-btn" onclick="window.saveUploadedPhoto()">Simpan Foto</button>
     </div>
 </div>
+
+    <!-- Expense History Modal dengan Edit/Delete -->
+<div class="modal-overlay" id="expenseHistoryModal">
+    <div class="modal" style="max-width:500px">
+        <div class="modal-header"><h2>Riwayat Pengeluaran Hari Ini</h2><button class="modal-close" onclick="window.closeModal('expenseHistoryModal')"><i class="fas fa-xmark"></i></button></div>
+        <div id="expenseHistoryContent"></div>
+    </div>
+</div>
+
+<!-- Edit Expense Modal -->
+<div class="modal-overlay" id="editExpenseModal">
+    <div class="modal">
+        <div class="modal-header"><h2>Edit Pengeluaran</h2><button class="modal-close" onclick="window.closeModal('editExpenseModal')"><i class="fas fa-xmark"></i></button></div>
+        <input type="hidden" id="editExpenseId">
+        <div class="input-group"><label>Kategori/Keterangan</label><input type="text" id="editExpenseCategory"></div>
+        <div class="input-group"><label>Jumlah (Rp)</label><input type="number" id="editExpenseAmount"></div>
+        <button class="add-to-cart-btn" onclick="window.saveEditedExpense()">Simpan Perubahan</button>
+    </div>
+</div>
+
+<!-- Recipe Modal untuk Produk -->
+<div class="modal-overlay" id="recipeModal">
+    <div class="modal" style="max-width:600px">
+        <div class="modal-header"><h2>Resep Produk</h2><button class="modal-close" onclick="window.closeModal('recipeModal')"><i class="fas fa-xmark"></i></button></div>
+        <div id="recipeContent"></div>
+    </div>
+</div>
+
+<!-- Category Management Modal -->
+<div class="modal-overlay" id="categoryModal">
+    <div class="modal">
+        <div class="modal-header"><h2>Kelola Kategori</h2><button class="modal-close" onclick="window.closeModal('categoryModal')"><i class="fas fa-xmark"></i></button></div>
+        <div id="categoryContent"></div>
+    </div>
+</div>
+    
 </body>
 </html>
