@@ -463,3 +463,175 @@ body.role-kasir .owner-only { display: none !important; }
 .expense-history-modal-item .exp-amount { font-weight: 700; color: #ef4444; font-size: 14px; margin-left: 12px; }
 .expense-empty { text-align: center; padding: 40px; color: var(--text-light); }
 .expense-empty i { font-size: 48px; margin-bottom: 12px; opacity: 0.3; }
+
+/* FIX #2: Discount Inline */
+.discount-inline-section {
+    background: var(--bg);
+    padding: 10px 12px;
+    border-radius: 8px;
+    margin-bottom: 12px;
+    border: 1px solid var(--border);
+}
+.discount-inline-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.discount-inline-row label {
+    min-width: 60px;
+}
+.discount-inline-controls {
+    display: flex;
+    gap: 8px;
+    flex: 1;
+}
+.discount-inline-controls select,
+.discount-inline-controls input {
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 12px;
+    outline: none;
+    background: white;
+}
+.discount-inline-controls select:focus,
+.discount-inline-controls input:focus {
+    border-color: var(--primary);
+}
+.discount-inline-controls select {
+    flex: 1;
+}
+.discount-inline-controls input {
+    flex: 2;
+}
+
+/* FIX #1: Expense History Items dengan Edit/Delete */
+.expense-history-modal-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 8px;
+    background: var(--bg);
+}
+.expense-history-modal-item .exp-info { flex: 1; }
+.expense-history-modal-item .exp-cat { font-weight: 700; color: var(--text); font-size: 13px; }
+.expense-history-modal-item .exp-desc { font-size: 11px; color: var(--text-light); margin-top: 2px; }
+.expense-history-modal-item .exp-time { font-size: 11px; color: var(--text-light); }
+.expense-history-modal-item .exp-amount { font-weight: 700; color: #ef4444; font-size: 14px; margin: 0 12px; }
+.expense-history-modal-item .exp-actions {
+    display: flex;
+    gap: 4px;
+}
+.expense-history-modal-item .exp-actions button {
+    padding: 4px 8px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: white;
+    cursor: pointer;
+    font-size: 11px;
+    transition: 0.2s;
+}
+.expense-history-modal-item .exp-actions button:hover {
+    background: var(--primary-light);
+    border-color: var(--primary);
+}
+.expense-history-modal-item .exp-actions button.delete-exp-btn:hover {
+    background: #fee2e2;
+    border-color: #ef4444;
+    color: #ef4444;
+}
+
+/* FIX #4: Recipe Modal */
+.recipe-list {
+    max-height: 300px;
+    overflow-y: auto;
+    margin-bottom: 16px;
+}
+.recipe-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin-bottom: 6px;
+    background: var(--bg);
+}
+.recipe-item-info { flex: 1; }
+.recipe-item-name { font-weight: 600; font-size: 13px; }
+.recipe-item-qty { font-size: 12px; color: var(--text-light); }
+.recipe-add-form {
+    display: flex;
+    gap: 8px;
+    padding: 12px;
+    background: var(--primary-50);
+    border-radius: 8px;
+    border: 1px solid var(--primary);
+}
+.recipe-add-form select,
+.recipe-add-form input {
+    flex: 1;
+    padding: 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 12px;
+}
+
+/* FIX #6: Category Management */
+.category-list-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin-bottom: 6px;
+    background: var(--bg);
+}
+.category-list-item .cat-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1;
+}
+.category-list-item .cat-icon {
+    font-size: 20px;
+}
+.category-list-item .cat-name {
+    font-weight: 600;
+}
+.category-add-form {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+    padding: 12px;
+    background: var(--primary-50);
+    border-radius: 8px;
+    border: 1px solid var(--primary);
+}
+.category-add-form input {
+    flex: 1;
+    padding: 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 12px;
+}
+
+/* Product Recipe Button */
+.recipe-btn {
+    padding: 4px 8px;
+    border: 1px solid var(--primary);
+    border-radius: 4px;
+    background: var(--primary-light);
+    color: var(--primary-dark);
+    cursor: pointer;
+    font-size: 11px;
+    margin-right: 4px;
+}
+.recipe-btn:hover {
+    background: var(--primary);
+    color: white;
+}
