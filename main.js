@@ -152,16 +152,214 @@
     window.editIngredient = async function(id) { const { data } = await supabase.from('ingredients').select('*').eq('id', id).single(); if (!data) return; document.getElementById('ingredientFormTitle').innerText = 'Edit Bahan'; document.getElementById('editIngredientId').value = data.id; document.getElementById('editIngredientName').value = data.name; document.getElementById('editIngredientStock').value = data.stock_qty; document.getElementById('editIngredientUnit').value = data.unit; document.getElementById('editIngredientMin').value = data.min_stock; document.getElementById('editIngredientPrice').value = data.buy_price; document.getElementById('editIngredientSupplier').value = data.supplier || ''; document.getElementById('ingredientFormModal').classList.add('active'); };
     window.saveIngredient = async function() { const id = document.getElementById('editIngredientId').value || null; const name = document.getElementById('editIngredientName').value.trim(); const stock = parseFloat(document.getElementById('editIngredientStock').value) || 0; const unit = document.getElementById('editIngredientUnit').value || 'gram'; const min = parseFloat(document.getElementById('editIngredientMin').value) || 0; const price = parseFloat(document.getElementById('editIngredientPrice').value) || 0; const supplier = document.getElementById('editIngredientSupplier').value; if (!name) { showToast('Nama wajib!', true); return; } if (id) { const { error } = await supabase.from('ingredients').update({ name, stock_qty: stock, unit, min_stock: min, buy_price: price, supplier, updated_at: new Date().toISOString() }).eq('id', id); if (error) { showToast('Gagal: ' + error.message, true); return; } } else { const { error } = await supabase.from('ingredients').insert({ name, stock_qty: stock, unit, min_stock: min, buy_price: price, supplier, is_active: true }); if (error) { showToast('Gagal: ' + error.message, true); return; } } showToast('Bahan disimpan!'); window.closeModal('ingredientFormModal'); await loadInventory(); };
 
-    async function loadCash() { const { data } = await supabase.rpc('get_cash_sources'); const sources = data || []; document.getElementById('cashSourcesGrid').innerHTML = sources.map(s => `<div class="cash-card"><h4><i class="fas fa-vault" style="color:var(--primary)"></i>${s.name}</h4><div class="balance">${formatRp(s.current_balance)}</div><div class="cash-card-actions"><button class="cash-action-btn primary" onclick="window.showCashAction('transfer', '${s.id}', '${s.name}')"><i class="fas fa-arrow-right-arrow-left"></i> Transfer</button><button class="cash-action-btn" onclick="window.showCashAction('physical', '${s.id}', '${s.name}')"><i class="fas fa-calculator"></i> Hitung Fisik</button></div></div>`).join(''); const start = document.getElementById('cashFilterStart')?.value; const end = document.getElementById('cashFilterEnd')?.value; let query = supabase.from('cash_mutations').select('*, cash_sources(name)').order('created_at', { ascending: false }).limit(50); if (start) query = query.gte('created_at', start + 'T00:00:00+07:00'); if (end) query = query.lte('created_at', end + 'T23:59:59+07:00'); const { data: muts } = await query; const m = muts || []; document.getElementById('cashMutationsBody').innerHTML = m.length ? m.map(mut => `<tr><td>${new Date(mut.created_at).toLocaleString('id-ID')}</td><td>${mut.cash_sources?.name || '-'}</td><td><span class="badge badge-${mut.type==='in'?'success':'warning'}">${mut.type.toUpperCase()}</span></td><td>${mut.description || '-'}</td><td style="color:${mut.type==='in'?'var(--primary)':'#ef4444'};font-weight:700">${mut.type==='in'?'+':'-'}${formatRp(mut.amount)}</td><td class="mutation-action-btns"><button onclick="window.viewMutationDetail('${mut.id}')" title="Lihat Detail"><i class="fas fa-eye"></i></button><button onclick="window.editMutation('${mut.id}')" title="Edit"><i class="fas fa-edit"></i></button><button class="delete-mut-btn" onclick="window.deleteMutation('${mut.id}')" title="Hapus"><i class="fas fa-trash"></i></button></td></tr>`).join('') : '<tr><td colspan="6" style="text-align:center;padding:30px">Belum ada mutasi</td></tr>'; const fromSelect = document.getElementById('transferFrom'); const toSelect = document.getElementById('transferTo'); if (fromSelect) fromSelect.innerHTML = sources.map(s => `<option value="${s.id}">${s.name} (${formatRp(s.current_balance)})</option>`).join(''); if (toSelect) toSelect.innerHTML = sources.map(s => `<option value="${s.id}">${s.name}</option>`).join(''); }
+        async function loadCash() { 
+        const { data } = await supabase.rpc('get_cash_sources'); 
+        const sources = data || []; 
+        
+        document.getElementById('cashSourcesGrid').innerHTML = sources.map(s => `
+            <div class="cash-card">
+                <h4><i class="fas fa-vault" style="color:var(--primary)"></i>${s.name}</h4>
+                <div class="balance">${formatRp(s.current_balance)}</div>
+                <div class="cash-card-actions">
+                    <button class="cash-action-btn primary" onclick="window.showCashAction('transfer', '${s.id}', '${s.name}')">
+                        <i class="fas fa-arrow-right-arrow-left"></i> Transfer
+                    </button>
+                    <button class="cash-action-btn" onclick="window.showCashAction('physical', '${s.id}', '${s.name}')">
+                        <i class="fas fa-calculator"></i> Hitung Fisik
+                    </button>
+                </div>
+            </div>
+        `).join(''); 
+        
+        const start = document.getElementById('cashFilterStart')?.value; 
+        const end = document.getElementById('cashFilterEnd')?.value; 
+        let query = supabase.from('cash_mutations').select('*, cash_sources(name)').order('created_at', { ascending: false }).limit(100); 
+        if (start) query = query.gte('created_at', start + 'T00:00:00+07:00'); 
+        if (end) query = query.lte('created_at', end + 'T23:59:59+07:00'); 
+        const { data: muts } = await query; 
+        const m = muts || []; 
+        
+        document.getElementById('cashMutationsBody').innerHTML = m.length ? m.map(mut => `
+            <tr>
+                <td>${new Date(mut.created_at).toLocaleString('id-ID')}</td>
+                <td>${mut.cash_sources?.name || '-'}</td>
+                <td><span class="badge badge-${mut.type==='in'?'success':'warning'}">${mut.type.toUpperCase()}</span></td>
+                <td>${mut.description || '-'}</td>
+                <td style="color:${mut.type==='in'?'var(--primary)':'#ef4444'};font-weight:700">
+                    ${mut.type==='in'?'+':'-'}${formatRp(mut.amount)}
+                </td>
+                <td class="mutation-action-btns">
+                    <button onclick="window.viewMutationDetail('${mut.id}')" title="Lihat Detail">
+                        <i class="fas fa-eye"></i>
+                    </button>
+                    <button onclick="window.editMutation('${mut.id}')" title="Edit">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="delete-mut-btn" onclick="window.deleteMutation('${mut.id}')" title="Hapus">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </td>
+            </tr>
+        `).join('') : '<tr><td colspan="6" style="text-align:center;padding:30px">Belum ada mutasi</td></tr>'; 
+        
+        const fromSelect = document.getElementById('transferFrom'); 
+        const toSelect = document.getElementById('transferTo'); 
+        if (fromSelect) fromSelect.innerHTML = sources.map(s => `<option value="${s.id}">${s.name} (${formatRp(s.current_balance)})</option>`).join(''); 
+        if (toSelect) toSelect.innerHTML = sources.map(s => `<option value="${s.id}">${s.name}</option>`).join(''); 
+    }
     window.loadCash = loadCash;
-    window.showTransferModal = function() { document.getElementById('transferAmount').value = ''; document.getElementById('transferDesc').value = ''; document.getElementById('transferModal').classList.add('active'); };
-    window.processTransfer = async function() { const from = document.getElementById('transferFrom').value; const to = document.getElementById('transferTo').value; const amount = parseFloat(document.getElementById('transferAmount').value) || 0; const desc = document.getElementById('transferDesc').value.trim(); if (from === to) { showToast('Sumber & tujuan sama!', true); return; } if (!amount) { showToast('Jumlah wajib!', true); return; } const { data, error } = await supabase.rpc('transfer_cash', { p_from: from, p_to: to, p_amount: amount, p_desc: desc, p_by: state.currentUser?.id || null }); if (error || !data?.success) { showToast(data?.message || 'Gagal', true); return; } showToast('Transfer berhasil!'); window.closeModal('transferModal'); await loadCash(); };
-    window.showCashAction = function(action, sourceId, sourceName) { const content = document.getElementById('cashActionContent'); document.getElementById('cashActionTitle').innerText = action === 'transfer' ? `Transfer dari ${sourceName}` : `Hitung Fisik - ${sourceName}`; if (action === 'transfer') { content.innerHTML = `<div class="input-group"><label>Ke Sumber</label><select id="cashActionTo"></select></div><div class="input-group"><label>Jumlah</label><input type="number" id="cashActionAmount"></div><div class="input-group"><label>Keterangan</label><input type="text" id="cashActionDesc"></div><button class="add-to-cart-btn" onclick="window.processCashAction('transfer', '${sourceId}')">Transfer</button>`; supabase.rpc('get_cash_sources').then(({ data }) => { document.getElementById('cashActionTo').innerHTML = (data || []).filter(s => s.id !== sourceId).map(s => `<option value="${s.id}">${s.name} (${formatRp(s.current_balance)})</option>`).join(''); }); } else { content.innerHTML = `<div class="input-group"><label>Saldo Sistem</label><input type="text" id="cashActionSystemBalance" readonly></div><div class="input-group"><label>Hitung Fisik (Rp)</label><input type="number" id="cashActionPhysical"></div><div class="input-group"><label>Keterangan</label><input type="text" id="cashActionDesc" placeholder="Selisih otomatis dicatat"></div><button class="add-to-cart-btn" onclick="window.processCashAction('physical', '${sourceId}')">Simpan</button>`; supabase.from('cash_sources').select('current_balance').eq('id', sourceId).single().then(({ data }) => { if (data) document.getElementById('cashActionSystemBalance').value = formatRp(data.current_balance); }); } document.getElementById('cashActionModal').classList.add('active'); };
-    window.processCashAction = async function(action, sourceId) { const amount = parseFloat(document.getElementById('cashActionAmount')?.value || document.getElementById('cashActionPhysical')?.value) || 0; const desc = document.getElementById('cashActionDesc')?.value.trim() || ''; if (action === 'transfer') { const to = document.getElementById('cashActionTo').value; if (!to || !amount) { showToast('Lengkapi data!', true); return; } const { data, error } = await supabase.rpc('transfer_cash', { p_from: sourceId, p_to: to, p_amount: amount, p_desc: desc, p_by: state.currentUser?.id || null }); if (error || !data?.success) { showToast(data?.message || 'Gagal', true); return; } showToast('Transfer berhasil!'); } else { const { data: source } = await supabase.from('cash_sources').select('current_balance').eq('id', sourceId).single(); if (!source) return; const diff = amount - source.current_balance; if (diff !== 0) { const type = diff > 0 ? 'in' : 'out'; await supabase.from('cash_sources').update({ current_balance: amount }).eq('id', sourceId); await supabase.from('cash_mutations').insert({ source_id: sourceId, type, amount: Math.abs(diff), reference_type: 'adjustment', description: `Penyesuaian fisik: ${desc || 'Selisih hitung fisik'}`, created_by: state.currentUser?.id }); } showToast('Hitung fisik disimpan!'); } window.closeModal('cashActionModal'); await loadCash(); };
-    window.viewMutationDetail = async function(mutationId) { const { data: mut } = await supabase.from('cash_mutations').select('*, cash_sources(name)').eq('id', mutationId).single(); if (!mut) { showToast('Mutasi tidak ditemukan', true); return; } let relatedInfo = ''; if (mut.reference_type === 'sale') { const { data: order } = await supabase.from('orders').select('*').eq('id', mut.reference_id).single(); if (order) { relatedInfo = `<div class="mutation-detail-row"><span class="mutation-detail-label">Order Number</span><span class="mutation-detail-value">${order.order_number}</span></div><div class="mutation-detail-row"><span class="mutation-detail-label">Customer</span><span class="mutation-detail-value">${order.customer_name || 'Walk-in'}</span></div><div class="mutation-detail-row"><span class="mutation-detail-label">Payment Method</span><span class="mutation-detail-value">${(order.payment_method || 'cash').toUpperCase()}</span></div>`; } } else if (mut.reference_type === 'expense') { const { data: expense } = await supabase.from('expenses').select('*').eq('id', mut.reference_id).single(); if (expense) { relatedInfo = `<div class="mutation-detail-row"><span class="mutation-detail-label">Kategori</span><span class="mutation-detail-value">${expense.category}</span></div><div class="mutation-detail-row"><span class="mutation-detail-label">Deskripsi</span><span class="mutation-detail-value">${expense.description || '-'}</span></div>`; } } else if (mut.reference_type === 'transfer') { relatedInfo = `<div class="mutation-detail-row"><span class="mutation-detail-label">Tipe Transfer</span><span class="mutation-detail-value">${mut.type === 'out' ? 'Sumber' : 'Tujuan'}</span></div>`; } else if (mut.reference_type === 'adjustment') { relatedInfo = `<div class="mutation-detail-row"><span class="mutation-detail-label">Tipe</span><span class="mutation-detail-value">Penyesuaian Fisik</span></div>`; } document.getElementById('mutationDetailContent').innerHTML = `<div class="mutation-detail-row"><span class="mutation-detail-label">Tanggal</span><span class="mutation-detail-value">${new Date(mut.created_at).toLocaleString('id-ID')}</span></div><div class="mutation-detail-row"><span class="mutation-detail-label">Sumber Kas</span><span class="mutation-detail-value">${mut.cash_sources?.name || '-'}</span></div><div class="mutation-detail-row"><span class="mutation-detail-label">Tipe</span><span class="mutation-detail-value"><span class="badge badge-${mut.type==='in'?'success':'warning'}">${mut.type.toUpperCase()}</span></span></div><div class="mutation-detail-row"><span class="mutation-detail-label">Jumlah</span><span class="mutation-detail-value" style="color:${mut.type==='in'?'var(--primary)':'#ef4444'}">${mut.type==='in'?'+':'-'}${formatRp(mut.amount)}</span></div><div class="mutation-detail-row"><span class="mutation-detail-label">Deskripsi</span><span class="mutation-detail-value">${mut.description || '-'}</span></div>${relatedInfo ? `<div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)"><h4 style="margin-bottom:12px;font-size:14px">Informasi Terkait</h4>${relatedInfo}</div>` : ''}`; document.getElementById('mutationDetailModal').classList.add('active'); };
-    window.editMutation = async function(mutationId) { const { data: mut } = await supabase.from('cash_mutations').select('*').eq('id', mutationId).single(); if (!mut) { showToast('Mutasi tidak ditemukan', true); return; } document.getElementById('editMutationId').value = mutationId; document.getElementById('editMutationAmount').value = mut.amount; document.getElementById('editMutationDesc').value = mut.description || ''; document.getElementById('editMutationModal').classList.add('active'); };
-    window.saveEditedMutation = async function() { const id = document.getElementById('editMutationId').value; const amount = parseFloat(document.getElementById('editMutationAmount').value) || 0; const desc = document.getElementById('editMutationDesc').value.trim(); if (!amount) { showToast('Jumlah wajib!', true); return; } const { data, error } = await supabase.rpc('update_cash_mutation', { p_mutation_id: id, p_new_amount: amount, p_new_description: desc }); if (error || !data?.success) { showToast('Gagal: ' + (error?.message || 'Unknown'), true); return; } showToast('Mutasi diupdate!'); window.closeModal('editMutationModal'); await loadCash(); };
-    window.deleteMutation = async function(mutationId) { if (!confirm('Hapus mutasi ini? Semua data terkait (order/expense) akan ikut terhapus dan saldo dikembalikan.')) return; const { data, error } = await supabase.rpc('delete_cash_mutation', { p_mutation_id: mutationId }); if (error || !data?.success) { showToast('Gagal: ' + (error?.message || 'Unknown'), true); return; } showToast('Mutasi dan data terkait dihapus!'); await loadCash(); if (state.currentPage === 'orders') { await loadOrders(); } };
+
+    // FIX: Tambah Mutasi Manual
+    window.showAddMutationModal = async function() {
+        const { data } = await supabase.rpc('get_cash_sources');
+        const sources = data || [];
+        document.getElementById('addMutationSource').innerHTML = sources.map(s => 
+            `<option value="${s.id}">${s.name} (${formatRp(s.current_balance)})</option>`
+        ).join('');
+        document.getElementById('addMutationAmount').value = '';
+        document.getElementById('addMutationDesc').value = '';
+        document.getElementById('addMutationModal').classList.add('active');
+    };
+
+    window.saveManualMutation = async function() {
+        const sourceId = document.getElementById('addMutationSource').value;
+        const type = document.getElementById('addMutationType').value;
+        const amount = parseFloat(document.getElementById('addMutationAmount').value) || 0;
+        const desc = document.getElementById('addMutationDesc').value.trim();
+        
+        if (!sourceId) { showToast('Pilih sumber kas!', true); return; }
+        if (!amount || amount <= 0) { showToast('Jumlah harus lebih dari 0!', true); return; }
+        if (!desc) { showToast('Deskripsi wajib!', true); return; }
+        
+        const { data, error } = await supabase.rpc('add_manual_mutation', {
+            p_source_id: sourceId,
+            p_type: type,
+            p_amount: amount,
+            p_description: desc,
+            p_created_by: state.currentUser?.id || null
+        });
+        
+        if (error || !data?.success) {
+            showToast('Gagal: ' + (error?.message || data?.message || 'Unknown'), true);
+            return;
+        }
+        
+        showToast('Mutasi berhasil ditambahkan!');
+        window.closeModal('addMutationModal');
+        await loadCash();
+    };
+
+    window.showTransferModal = function() { 
+        document.getElementById('transferAmount').value = ''; 
+        document.getElementById('transferDesc').value = ''; 
+        document.getElementById('transferModal').classList.add('active'); 
+    };
+    
+    window.processTransfer = async function() { 
+        const from = document.getElementById('transferFrom').value; 
+        const to = document.getElementById('transferTo').value; 
+        const amount = parseFloat(document.getElementById('transferAmount').value) || 0; 
+        const desc = document.getElementById('transferDesc').value.trim(); 
+        if (from === to) { showToast('Sumber & tujuan sama!', true); return; } 
+        if (!amount) { showToast('Jumlah wajib!', true); return; } 
+        const { data, error } = await supabase.rpc('transfer_cash', { p_from: from, p_to: to, p_amount: amount, p_desc: desc, p_by: state.currentUser?.id || null }); 
+        if (error || !data?.success) { showToast(data?.message || 'Gagal', true); return; } 
+        showToast('Transfer berhasil!'); 
+        window.closeModal('transferModal'); 
+        await loadCash(); 
+    };
+    
+    window.showCashAction = function(action, sourceId, sourceName) { 
+        const content = document.getElementById('cashActionContent'); 
+        document.getElementById('cashActionTitle').innerText = action === 'transfer' ? `Transfer dari ${sourceName}` : `Hitung Fisik - ${sourceName}`; 
+        if (action === 'transfer') { 
+            content.innerHTML = `<div class="input-group"><label>Ke Sumber</label><select id="cashActionTo"></select></div><div class="input-group"><label>Jumlah</label><input type="number" id="cashActionAmount"></div><div class="input-group"><label>Keterangan</label><input type="text" id="cashActionDesc"></div><button class="add-to-cart-btn" onclick="window.processCashAction('transfer', '${sourceId}')">Transfer</button>`; 
+            supabase.rpc('get_cash_sources').then(({ data }) => { document.getElementById('cashActionTo').innerHTML = (data || []).filter(s => s.id !== sourceId).map(s => `<option value="${s.id}">${s.name} (${formatRp(s.current_balance)})</option>`).join(''); }); 
+        } else { 
+            content.innerHTML = `<div class="input-group"><label>Saldo Sistem</label><input type="text" id="cashActionSystemBalance" readonly></div><div class="input-group"><label>Hitung Fisik (Rp)</label><input type="number" id="cashActionPhysical"></div><div class="input-group"><label>Keterangan</label><input type="text" id="cashActionDesc" placeholder="Selisih otomatis dicatat"></div><button class="add-to-cart-btn" onclick="window.processCashAction('physical', '${sourceId}')">Simpan</button>`; 
+            supabase.from('cash_sources').select('current_balance').eq('id', sourceId).single().then(({ data }) => { if (data) document.getElementById('cashActionSystemBalance').value = formatRp(data.current_balance); }); 
+        } 
+        document.getElementById('cashActionModal').classList.add('active'); 
+    };
+    
+    window.processCashAction = async function(action, sourceId) { 
+        const amount = parseFloat(document.getElementById('cashActionAmount')?.value || document.getElementById('cashActionPhysical')?.value) || 0; 
+        const desc = document.getElementById('cashActionDesc')?.value.trim() || ''; 
+        if (action === 'transfer') { 
+            const to = document.getElementById('cashActionTo').value; 
+            if (!to || !amount) { showToast('Lengkapi data!', true); return; } 
+            const { data, error } = await supabase.rpc('transfer_cash', { p_from: sourceId, p_to: to, p_amount: amount, p_desc: desc, p_by: state.currentUser?.id || null }); 
+            if (error || !data?.success) { showToast(data?.message || 'Gagal', true); return; } 
+            showToast('Transfer berhasil!'); 
+        } else { 
+            const { data: source } = await supabase.from('cash_sources').select('current_balance').eq('id', sourceId).single(); 
+            if (!source) return; 
+            const diff = amount - source.current_balance; 
+            if (diff !== 0) { 
+                const type = diff > 0 ? 'in' : 'out'; 
+                await supabase.from('cash_sources').update({ current_balance: amount }).eq('id', sourceId); 
+                await supabase.from('cash_mutations').insert({ source_id: sourceId, type, amount: Math.abs(diff), reference_type: 'adjustment', description: `Penyesuaian fisik: ${desc || 'Selisih hitung fisik'}`, created_by: state.currentUser?.id }); 
+            } 
+            showToast('Hitung fisik disimpan!'); 
+        } 
+        window.closeModal('cashActionModal'); 
+        await loadCash(); 
+    };
+    
+    window.viewMutationDetail = async function(mutationId) { 
+        const { data: mut } = await supabase.from('cash_mutations').select('*, cash_sources(name)').eq('id', mutationId).single(); 
+        if (!mut) { showToast('Mutasi tidak ditemukan', true); return; } 
+        let relatedInfo = ''; 
+        if (mut.reference_type === 'sale') { 
+            const { data: order } = await supabase.from('orders').select('*').eq('id', mut.reference_id).single(); 
+            if (order) { relatedInfo = `<div class="mutation-detail-row"><span class="mutation-detail-label">Order Number</span><span class="mutation-detail-value">${order.order_number}</span></div><div class="mutation-detail-row"><span class="mutation-detail-label">Customer</span><span class="mutation-detail-value">${order.customer_name || 'Walk-in'}</span></div><div class="mutation-detail-row"><span class="mutation-detail-label">Payment Method</span><span class="mutation-detail-value">${(order.payment_method || 'cash').toUpperCase()}</span></div>`; } 
+        } else if (mut.reference_type === 'expense') { 
+            const { data: expense } = await supabase.from('expenses').select('*').eq('id', mut.reference_id).single(); 
+            if (expense) { relatedInfo = `<div class="mutation-detail-row"><span class="mutation-detail-label">Kategori</span><span class="mutation-detail-value">${expense.category}</span></div><div class="mutation-detail-row"><span class="mutation-detail-label">Deskripsi</span><span class="mutation-detail-value">${expense.description || '-'}</span></div>`; } 
+        } else if (mut.reference_type === 'transfer') { 
+            relatedInfo = `<div class="mutation-detail-row"><span class="mutation-detail-label">Tipe Transfer</span><span class="mutation-detail-value">${mut.type === 'out' ? 'Sumber' : 'Tujuan'}</span></div>`; 
+        } else if (mut.reference_type === 'adjustment') { 
+            relatedInfo = `<div class="mutation-detail-row"><span class="mutation-detail-label">Tipe</span><span class="mutation-detail-value">Penyesuaian Fisik</span></div>`; 
+        } else if (mut.reference_type === 'manual') {
+            relatedInfo = `<div class="mutation-detail-row"><span class="mutation-detail-label">Tipe</span><span class="mutation-detail-value">Manual Input</span></div>`;
+        }
+        document.getElementById('mutationDetailContent').innerHTML = `<div class="mutation-detail-row"><span class="mutation-detail-label">Tanggal</span><span class="mutation-detail-value">${new Date(mut.created_at).toLocaleString('id-ID')}</span></div><div class="mutation-detail-row"><span class="mutation-detail-label">Sumber Kas</span><span class="mutation-detail-value">${mut.cash_sources?.name || '-'}</span></div><div class="mutation-detail-row"><span class="mutation-detail-label">Tipe</span><span class="mutation-detail-value"><span class="badge badge-${mut.type==='in'?'success':'warning'}">${mut.type.toUpperCase()}</span></span></div><div class="mutation-detail-row"><span class="mutation-detail-label">Jumlah</span><span class="mutation-detail-value" style="color:${mut.type==='in'?'var(--primary)':'#ef4444'}">${mut.type==='in'?'+':'-'}${formatRp(mut.amount)}</span></div><div class="mutation-detail-row"><span class="mutation-detail-label">Deskripsi</span><span class="mutation-detail-value">${mut.description || '-'}</span></div>${relatedInfo ? `<div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)"><h4 style="margin-bottom:12px;font-size:14px">Informasi Terkait</h4>${relatedInfo}</div>` : ''}`; 
+        document.getElementById('mutationDetailModal').classList.add('active'); 
+    };
+    
+    window.editMutation = async function(mutationId) { 
+        const { data: mut } = await supabase.from('cash_mutations').select('*').eq('id', mutationId).single(); 
+        if (!mut) { showToast('Mutasi tidak ditemukan', true); return; } 
+        if (mut.reference_type !== 'manual' && mut.reference_type !== 'adjustment') {
+            showToast('Hanya mutasi manual/adjustment yang bisa diedit', true);
+            return;
+        }
+        document.getElementById('editMutationId').value = mutationId; 
+        document.getElementById('editMutationAmount').value = mut.amount; 
+        document.getElementById('editMutationDesc').value = mut.description || ''; 
+        document.getElementById('editMutationModal').classList.add('active'); 
+    };
+    
+    window.saveEditedMutation = async function() { 
+        const id = document.getElementById('editMutationId').value; 
+        const amount = parseFloat(document.getElementById('editMutationAmount').value) || 0; 
+        const desc = document.getElementById('editMutationDesc').value.trim(); 
+        if (!amount) { showToast('Jumlah wajib!', true); return; } 
+        const { data, error } = await supabase.rpc('update_cash_mutation', { p_mutation_id: id, p_new_amount: amount, p_new_description: desc }); 
+        if (error || !data?.success) { showToast('Gagal: ' + (error?.message || 'Unknown'), true); return; } 
+        showToast('Mutasi diupdate!'); 
+        window.closeModal('editMutationModal'); 
+        await loadCash(); 
+    };
+    
+    window.deleteMutation = async function(mutationId) { 
+        if (!confirm('Hapus mutasi ini? Semua data terkait akan ikut terhapus dan saldo dikembalikan.')) return; 
+        const { data, error } = await supabase.rpc('delete_cash_mutation', { p_mutation_id: mutationId }); 
+        if (error || !data?.success) { showToast('Gagal: ' + (error?.message || 'Unknown'), true); return; } 
+        showToast('Mutasi dan data terkait dihapus!'); 
+        await loadCash(); 
+        if (state.currentPage === 'orders') { await loadOrders(); } 
+    };
 
      async function loadAccounting() { const tab = document.querySelector('#page-accounting .tab.active')?.textContent.trim() || 'Jurnal'; const content = document.getElementById('accountingContent'); if (tab.includes('Jurnal')) { const { data: journals } = await supabase.from('journal_entries').select('*, journal_lines(*, chart_of_accounts(code, name))').order('created_at', { ascending: false }).limit(50); const entries = journals || []; content.innerHTML = entries.length ? entries.map(j => `<div class="journal-entry"><div class="journal-entry-header"><span>${j.date} - ${j.description || 'Tanpa deskripsi'}</span><span style="color:var(--text-light);font-size:11px">${new Date(j.created_at).toLocaleString('id-ID')}</span></div><div class="journal-lines">${(j.journal_lines || []).map(l => `<div class="journal-line ${l.debit > 0 ? 'debit' : 'credit'}"><span>${l.chart_of_accounts?.code || '-'} - ${l.chart_of_accounts?.name || '-'}</span><span>${l.debit > 0 ? 'Dr. ' : 'Cr. '}${formatRp(l.debit > 0 ? l.debit : l.credit)}</span></div>`).join('')}</div></div>`).join('') : '<div class="accounting-empty"><i class="fas fa-book-open" style="font-size:48px;margin-bottom:16px;color:var(--primary)"></i><h3>Belum ada jurnal</h3><p>Jurnal akan otomatis dibuat saat ada transaksi kasir, pengeluaran, atau transfer.</p></div>'; } else if (tab.includes('Chart')) { const { data: coa } = await supabase.from('chart_of_accounts').select('*').eq('is_active', true).order('code'); const accounts = coa || []; content.innerHTML = `<div class="table-container"><table class="data-table"><thead><tr><th>Kode</th><th>Nama Akun</th><th>Tipe</th></tr></thead><tbody>${accounts.map(a => `<tr><td><b>${a.code}</b></td><td>${a.name}</td><td><span class="badge badge-${a.type==='asset'?'success':a.type==='liability'?'warning':a.type==='equity'?'info':a.type==='revenue'?'success':'danger'}">${a.type.toUpperCase()}</span></td></tr>`).join('')}</tbody></table></div>`; } else if (tab.includes('Laba')) { const today = getTodayJakarta(); const firstDay = new Date().toISOString().slice(0,7) + '-01'; const { data: orders } = await supabase.from('orders').select('total').gte('created_at', firstDay + 'T00:00:00+07:00').eq('status', 'paid'); const { data: expenses } = await supabase.from('expenses').select('amount').gte('created_at', firstDay + 'T00:00:00+07:00'); const revenue = (orders || []).reduce((s, o) => s + parseFloat(o.total), 0); const expense = (expenses || []).reduce((s, e) => s + parseFloat(e.amount), 0); const profit = revenue - expense; content.innerHTML = `<div class="profit-result"><h4>Laba Rugi - Bulan Ini (${firstDay} s/d ${today})</h4><div class="profit-row"><span>Pendapatan (Penjualan)</span><b style="color:var(--primary)">${formatRp(revenue)}</b></div><div class="profit-row"><span>Pengeluaran</span><b style="color:#ef4444">-${formatRp(expense)}</b></div><div class="profit-row total"><span>Laba Bersih</span><b style="color:${profit>=0?'var(--primary)':'#ef4444'}">${formatRp(profit)}</b></div></div>`; } }
     window.loadAccounting = loadAccounting; window.switchAccountingTab = function(tab, btn) { document.querySelectorAll('#page-accounting .tab').forEach(t => t.classList.remove('active')); btn.classList.add('active'); loadAccounting(); };
