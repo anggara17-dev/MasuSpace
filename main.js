@@ -152,7 +152,7 @@
     window.editIngredient = async function(id) { const { data } = await supabase.from('ingredients').select('*').eq('id', id).single(); if (!data) return; document.getElementById('ingredientFormTitle').innerText = 'Edit Bahan'; document.getElementById('editIngredientId').value = data.id; document.getElementById('editIngredientName').value = data.name; document.getElementById('editIngredientStock').value = data.stock_qty; document.getElementById('editIngredientUnit').value = data.unit; document.getElementById('editIngredientMin').value = data.min_stock; document.getElementById('editIngredientPrice').value = data.buy_price; document.getElementById('editIngredientSupplier').value = data.supplier || ''; document.getElementById('ingredientFormModal').classList.add('active'); };
     window.saveIngredient = async function() { const id = document.getElementById('editIngredientId').value || null; const name = document.getElementById('editIngredientName').value.trim(); const stock = parseFloat(document.getElementById('editIngredientStock').value) || 0; const unit = document.getElementById('editIngredientUnit').value || 'gram'; const min = parseFloat(document.getElementById('editIngredientMin').value) || 0; const price = parseFloat(document.getElementById('editIngredientPrice').value) || 0; const supplier = document.getElementById('editIngredientSupplier').value; if (!name) { showToast('Nama wajib!', true); return; } if (id) { const { error } = await supabase.from('ingredients').update({ name, stock_qty: stock, unit, min_stock: min, buy_price: price, supplier, updated_at: new Date().toISOString() }).eq('id', id); if (error) { showToast('Gagal: ' + error.message, true); return; } } else { const { error } = await supabase.from('ingredients').insert({ name, stock_qty: stock, unit, min_stock: min, buy_price: price, supplier, is_active: true }); if (error) { showToast('Gagal: ' + error.message, true); return; } } showToast('Bahan disimpan!'); window.closeModal('ingredientFormModal'); await loadInventory(); };
 
-        async function loadCash() { 
+            async function loadCash() { 
         const { data } = await supabase.rpc('get_cash_sources'); 
         const sources = data || []; 
         
@@ -181,35 +181,37 @@
         
         document.getElementById('cashMutationsBody').innerHTML = m.length ? m.map(mut => `
             <tr>
-                <td>${new Date(mut.created_at).toLocaleString('id-ID')}</td>
-                <td>${mut.cash_sources?.name || '-'}</td>
-                <td><span class="badge badge-${mut.type==='in'?'success':'warning'}">${mut.type.toUpperCase()}</span></td>
-                <td>${mut.description || '-'}</td>
-                <td style="color:${mut.type==='in'?'var(--primary)':'#ef4444'};font-weight:700">
+                <td style="font-weight:500">${new Date(mut.created_at).toLocaleString('id-ID')}</td>
+                <td><b>${mut.cash_sources?.name || '-'}</b></td>
+                <td><span class="badge badge-${mut.type==='in'?'success':'warning'}"><i class="fas fa-${mut.type==='in'?'arrow-down':'arrow-up'}" style="margin-right:4px"></i>${mut.type.toUpperCase()}</span></td>
+                <td style="color:var(--text)">${mut.description || '-'}</td>
+                <td style="color:${mut.type==='in'?'var(--primary)':'#ef4444'};font-weight:800;font-size:14px">
                     ${mut.type==='in'?'+':'-'}${formatRp(mut.amount)}
                 </td>
                 <td class="mutation-action-btns">
-                    <button onclick="window.viewMutationDetail('${mut.id}')" title="Lihat Detail">
+                    <button class="view-btn" onclick="window.viewMutationDetail('${mut.id}')" title="Lihat Detail">
                         <i class="fas fa-eye"></i>
                     </button>
-                    <button onclick="window.editMutation('${mut.id}')" title="Edit">
-                        <i class="fas fa-edit"></i>
+                    <button class="edit-btn" onclick="window.editMutation('${mut.id}')" title="Edit">
+                        <i class="fas fa-pen"></i>
                     </button>
                     <button class="delete-mut-btn" onclick="window.deleteMutation('${mut.id}')" title="Hapus">
                         <i class="fas fa-trash"></i>
                     </button>
                 </td>
             </tr>
-        `).join('') : '<tr><td colspan="6" style="text-align:center;padding:30px">Belum ada mutasi</td></tr>'; 
+        `).join('') : '<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-light)"><i class="fas fa-inbox" style="font-size:32px;margin-bottom:8px;opacity:0.3"></i><p>Belum ada mutasi kas</p></td></tr>'; 
         
         const fromSelect = document.getElementById('transferFrom'); 
         const toSelect = document.getElementById('transferTo'); 
+        const addSourceSelect = document.getElementById('addMutationSource');
         if (fromSelect) fromSelect.innerHTML = sources.map(s => `<option value="${s.id}">${s.name} (${formatRp(s.current_balance)})</option>`).join(''); 
-        if (toSelect) toSelect.innerHTML = sources.map(s => `<option value="${s.id}">${s.name}</option>`).join(''); 
+        if (toSelect) toSelect.innerHTML = sources.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+        if (addSourceSelect) addSourceSelect.innerHTML = sources.map(s => `<option value="${s.id}">${s.name} (${formatRp(s.current_balance)})</option>`).join('');
     }
     window.loadCash = loadCash;
 
-    // FIX: Tambah Mutasi Manual
+    // Tambah Mutasi Manual
     window.showAddMutationModal = async function() {
         const { data } = await supabase.rpc('get_cash_sources');
         const sources = data || [];
@@ -273,10 +275,10 @@
         const content = document.getElementById('cashActionContent'); 
         document.getElementById('cashActionTitle').innerText = action === 'transfer' ? `Transfer dari ${sourceName}` : `Hitung Fisik - ${sourceName}`; 
         if (action === 'transfer') { 
-            content.innerHTML = `<div class="input-group"><label>Ke Sumber</label><select id="cashActionTo"></select></div><div class="input-group"><label>Jumlah</label><input type="number" id="cashActionAmount"></div><div class="input-group"><label>Keterangan</label><input type="text" id="cashActionDesc"></div><button class="add-to-cart-btn" onclick="window.processCashAction('transfer', '${sourceId}')">Transfer</button>`; 
+            content.innerHTML = `<div class="input-group"><label>Ke Sumber</label><select id="cashActionTo"></select></div><div class="input-group"><label>Jumlah (Rp)</label><input type="number" id="cashActionAmount" placeholder="0"></div><div class="input-group"><label>Keterangan</label><input type="text" id="cashActionDesc" placeholder="Keterangan transfer"></div><button class="add-to-cart-btn" onclick="window.processCashAction('transfer', '${sourceId}')"><i class="fas fa-arrow-right-arrow-left"></i> Transfer Sekarang</button>`; 
             supabase.rpc('get_cash_sources').then(({ data }) => { document.getElementById('cashActionTo').innerHTML = (data || []).filter(s => s.id !== sourceId).map(s => `<option value="${s.id}">${s.name} (${formatRp(s.current_balance)})</option>`).join(''); }); 
         } else { 
-            content.innerHTML = `<div class="input-group"><label>Saldo Sistem</label><input type="text" id="cashActionSystemBalance" readonly></div><div class="input-group"><label>Hitung Fisik (Rp)</label><input type="number" id="cashActionPhysical"></div><div class="input-group"><label>Keterangan</label><input type="text" id="cashActionDesc" placeholder="Selisih otomatis dicatat"></div><button class="add-to-cart-btn" onclick="window.processCashAction('physical', '${sourceId}')">Simpan</button>`; 
+            content.innerHTML = `<div class="input-group"><label>Saldo Sistem</label><input type="text" id="cashActionSystemBalance" readonly></div><div class="input-group"><label>Hitung Fisik (Rp)</label><input type="number" id="cashActionPhysical" placeholder="0"></div><div class="input-group"><label>Keterangan</label><input type="text" id="cashActionDesc" placeholder="Selisih otomatis dicatat"></div><button class="add-to-cart-btn" onclick="window.processCashAction('physical', '${sourceId}')"><i class="fas fa-save"></i> Simpan</button>`; 
             supabase.from('cash_sources').select('current_balance').eq('id', sourceId).single().then(({ data }) => { if (data) document.getElementById('cashActionSystemBalance').value = formatRp(data.current_balance); }); 
         } 
         document.getElementById('cashActionModal').classList.add('active'); 
@@ -312,18 +314,25 @@
         let relatedInfo = ''; 
         if (mut.reference_type === 'sale') { 
             const { data: order } = await supabase.from('orders').select('*').eq('id', mut.reference_id).single(); 
-            if (order) { relatedInfo = `<div class="mutation-detail-row"><span class="mutation-detail-label">Order Number</span><span class="mutation-detail-value">${order.order_number}</span></div><div class="mutation-detail-row"><span class="mutation-detail-label">Customer</span><span class="mutation-detail-value">${order.customer_name || 'Walk-in'}</span></div><div class="mutation-detail-row"><span class="mutation-detail-label">Payment Method</span><span class="mutation-detail-value">${(order.payment_method || 'cash').toUpperCase()}</span></div>`; } 
+            if (order) { relatedInfo = `<div class="mutation-detail-row"><span class="mutation-detail-label">No. Order</span><span class="mutation-detail-value">${order.order_number}</span></div><div class="mutation-detail-row"><span class="mutation-detail-label">Customer</span><span class="mutation-detail-value">${order.customer_name || 'Walk-in'}</span></div><div class="mutation-detail-row"><span class="mutation-detail-label">Metode Bayar</span><span class="mutation-detail-value"><span class="badge badge-info">${(order.payment_method || 'cash').toUpperCase()}</span></span></div>`; } 
         } else if (mut.reference_type === 'expense') { 
             const { data: expense } = await supabase.from('expenses').select('*').eq('id', mut.reference_id).single(); 
             if (expense) { relatedInfo = `<div class="mutation-detail-row"><span class="mutation-detail-label">Kategori</span><span class="mutation-detail-value">${expense.category}</span></div><div class="mutation-detail-row"><span class="mutation-detail-label">Deskripsi</span><span class="mutation-detail-value">${expense.description || '-'}</span></div>`; } 
         } else if (mut.reference_type === 'transfer') { 
-            relatedInfo = `<div class="mutation-detail-row"><span class="mutation-detail-label">Tipe Transfer</span><span class="mutation-detail-value">${mut.type === 'out' ? 'Sumber' : 'Tujuan'}</span></div>`; 
+            relatedInfo = `<div class="mutation-detail-row"><span class="mutation-detail-label">Tipe</span><span class="mutation-detail-value"><span class="badge badge-warning">TRANSFER</span></span></div><div class="mutation-detail-row"><span class="mutation-detail-label">Posisi</span><span class="mutation-detail-value">${mut.type === 'out' ? 'Sumber Transfer' : 'Tujuan Transfer'}</span></div>`; 
         } else if (mut.reference_type === 'adjustment') { 
-            relatedInfo = `<div class="mutation-detail-row"><span class="mutation-detail-label">Tipe</span><span class="mutation-detail-value">Penyesuaian Fisik</span></div>`; 
+            relatedInfo = `<div class="mutation-detail-row"><span class="mutation-detail-label">Tipe</span><span class="mutation-detail-value"><span class="badge badge-info">ADJUSTMENT</span></span></div><div class="mutation-detail-row"><span class="mutation-detail-label">Keterangan</span><span class="mutation-detail-value">Penyesuaian Stok Fisik</span></div>`; 
         } else if (mut.reference_type === 'manual') {
-            relatedInfo = `<div class="mutation-detail-row"><span class="mutation-detail-label">Tipe</span><span class="mutation-detail-value">Manual Input</span></div>`;
+            relatedInfo = `<div class="mutation-detail-row"><span class="mutation-detail-label">Tipe</span><span class="mutation-detail-value"><span class="badge badge-success">MANUAL</span></span></div>`;
         }
-        document.getElementById('mutationDetailContent').innerHTML = `<div class="mutation-detail-row"><span class="mutation-detail-label">Tanggal</span><span class="mutation-detail-value">${new Date(mut.created_at).toLocaleString('id-ID')}</span></div><div class="mutation-detail-row"><span class="mutation-detail-label">Sumber Kas</span><span class="mutation-detail-value">${mut.cash_sources?.name || '-'}</span></div><div class="mutation-detail-row"><span class="mutation-detail-label">Tipe</span><span class="mutation-detail-value"><span class="badge badge-${mut.type==='in'?'success':'warning'}">${mut.type.toUpperCase()}</span></span></div><div class="mutation-detail-row"><span class="mutation-detail-label">Jumlah</span><span class="mutation-detail-value" style="color:${mut.type==='in'?'var(--primary)':'#ef4444'}">${mut.type==='in'?'+':'-'}${formatRp(mut.amount)}</span></div><div class="mutation-detail-row"><span class="mutation-detail-label">Deskripsi</span><span class="mutation-detail-value">${mut.description || '-'}</span></div>${relatedInfo ? `<div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border)"><h4 style="margin-bottom:12px;font-size:14px">Informasi Terkait</h4>${relatedInfo}</div>` : ''}`; 
+        document.getElementById('mutationDetailContent').innerHTML = `
+            <div class="mutation-detail-row"><span class="mutation-detail-label">Tanggal & Waktu</span><span class="mutation-detail-value">${new Date(mut.created_at).toLocaleString('id-ID')}</span></div>
+            <div class="mutation-detail-row"><span class="mutation-detail-label">Sumber Kas</span><span class="mutation-detail-value">${mut.cash_sources?.name || '-'}</span></div>
+            <div class="mutation-detail-row"><span class="mutation-detail-label">Tipe Transaksi</span><span class="mutation-detail-value"><span class="badge badge-${mut.type==='in'?'success':'warning'}"><i class="fas fa-${mut.type==='in'?'arrow-down':'arrow-up'}" style="margin-right:4px"></i>${mut.type.toUpperCase()}</span></span></div>
+            <div class="mutation-detail-row"><span class="mutation-detail-label">Jumlah</span><span class="mutation-detail-value" style="color:${mut.type==='in'?'var(--primary)':'#ef4444'};font-size:18px">${mut.type==='in'?'+':'-'}${formatRp(mut.amount)}</span></div>
+            <div class="mutation-detail-row"><span class="mutation-detail-label">Deskripsi</span><span class="mutation-detail-value">${mut.description || '-'}</span></div>
+            ${relatedInfo ? `<div style="margin-top:20px;padding-top:20px;border-top:2px solid var(--border)"><h4 style="margin-bottom:12px;font-size:14px;color:var(--primary-dark)"><i class="fas fa-link" style="margin-right:6px"></i>Informasi Terkait</h4>${relatedInfo}</div>` : ''}
+        `; 
         document.getElementById('mutationDetailModal').classList.add('active'); 
     };
     
@@ -347,16 +356,16 @@
         if (!amount) { showToast('Jumlah wajib!', true); return; } 
         const { data, error } = await supabase.rpc('update_cash_mutation', { p_mutation_id: id, p_new_amount: amount, p_new_description: desc }); 
         if (error || !data?.success) { showToast('Gagal: ' + (error?.message || 'Unknown'), true); return; } 
-        showToast('Mutasi diupdate!'); 
+        showToast('Mutasi berhasil diupdate!'); 
         window.closeModal('editMutationModal'); 
         await loadCash(); 
     };
     
     window.deleteMutation = async function(mutationId) { 
-        if (!confirm('Hapus mutasi ini? Semua data terkait akan ikut terhapus dan saldo dikembalikan.')) return; 
+        if (!confirm('Hapus mutasi ini?\n\nSemua data terkait (order/expense) akan ikut terhapus dan saldo akan dikembalikan.')) return; 
         const { data, error } = await supabase.rpc('delete_cash_mutation', { p_mutation_id: mutationId }); 
         if (error || !data?.success) { showToast('Gagal: ' + (error?.message || 'Unknown'), true); return; } 
-        showToast('Mutasi dan data terkait dihapus!'); 
+        showToast('Mutasi berhasil dihapus!'); 
         await loadCash(); 
         if (state.currentPage === 'orders') { await loadOrders(); } 
     };
