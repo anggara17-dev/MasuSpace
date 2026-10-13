@@ -248,29 +248,43 @@
                     </div>
                 </div>
 
-                <!-- CASH -->
                 <div id="page-cash" class="page">
-                    <div class="page-header">
-                        <h2>Kas & Bank</h2>
-                        <div class="filter-group">
-                            <button class="btn-primary" onclick="window.showTransferModal()"><i class="fas fa-arrow-right-arrow-left"></i> Transfer</button>
-                        </div>
-                    </div>
-                    <div class="cash-sources-grid" id="cashSourcesGrid"></div>
-                    <div class="page-section">
-                        <h3><i class="fas fa-clock-rotate-left"></i> Riwayat Mutasi Kas</h3>
-                        <div class="filter-group" style="margin-bottom:12px">
-                            <div class="date-range-filter"><i class="fas fa-calendar-days"></i><input type="date" id="cashFilterStart"><span>s/d</span><input type="date" id="cashFilterEnd"></div>
-                            <button class="btn-secondary" onclick="window.loadCash()"><i class="fas fa-filter"></i> Filter</button>
-                        </div>
-                        <div class="table-container">
-                            <table class="data-table">
-                                <thead><tr><th>Tanggal</th><th>Sumber</th><th>Tipe</th><th>Deskripsi</th><th>Jumlah</th></tr></thead>
-                                <tbody id="cashMutationsBody"></tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
+    <div class="page-header">
+        <h2>Kas & Bank</h2>
+        <div class="filter-group">
+            <button class="btn-primary" onclick="window.showAddMutationModal()"><i class="fas fa-plus"></i> Tambah Mutasi</button>
+            <button class="btn-secondary" onclick="window.showTransferModal()"><i class="fas fa-arrow-right-arrow-left"></i> Transfer</button>
+        </div>
+    </div>
+    <div class="cash-sources-grid" id="cashSourcesGrid"></div>
+    <div class="page-section">
+        <h3><i class="fas fa-clock-rotate-left"></i> Riwayat Mutasi Kas</h3>
+        <div class="filter-group" style="margin-bottom:12px">
+            <div class="date-range-filter">
+                <i class="fas fa-calendar-days"></i>
+                <input type="date" id="cashFilterStart">
+                <span>s/d</span>
+                <input type="date" id="cashFilterEnd">
+            </div>
+            <button class="btn-secondary" onclick="window.loadCash()"><i class="fas fa-filter"></i> Filter</button>
+        </div>
+        <div class="table-container">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Tanggal</th>
+                        <th>Sumber</th>
+                        <th>Tipe</th>
+                        <th>Deskripsi</th>
+                        <th>Jumlah</th>
+                        <th>Aksi</th>
+                    </tr>
+                </thead>
+                <tbody id="cashMutationsBody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
 
                 <!-- ACCOUNTING -->
                 <div id="page-accounting" class="page">
@@ -580,6 +594,35 @@
     <div class="modal">
         <div class="modal-header"><h2>Kelola Kategori</h2><button class="modal-close" onclick="window.closeModal('categoryModal')"><i class="fas fa-xmark"></i></button></div>
         <div id="categoryContent"></div>
+    </div>
+</div>
+<!-- Add Manual Mutation Modal -->
+<div class="modal-overlay" id="addMutationModal">
+    <div class="modal">
+        <div class="modal-header">
+            <h2>Tambah Mutasi Manual</h2>
+            <button class="modal-close" onclick="window.closeModal('addMutationModal')"><i class="fas fa-xmark"></i></button>
+        </div>
+        <div class="input-group">
+            <label>Sumber Kas</label>
+            <select id="addMutationSource"></select>
+        </div>
+        <div class="input-group">
+            <label>Tipe</label>
+            <select id="addMutationType">
+                <option value="in">Pemasukan (In)</option>
+                <option value="out">Pengeluaran (Out)</option>
+            </select>
+        </div>
+        <div class="input-group">
+            <label>Jumlah (Rp)</label>
+            <input type="number" id="addMutationAmount" placeholder="0">
+        </div>
+        <div class="input-group">
+            <label>Deskripsi</label>
+            <input type="text" id="addMutationDesc" placeholder="Keterangan mutasi">
+        </div>
+        <button class="add-to-cart-btn" onclick="window.saveManualMutation()">Simpan Mutasi</button>
     </div>
 </div>
     
