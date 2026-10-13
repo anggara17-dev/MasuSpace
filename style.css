@@ -635,3 +635,951 @@ body.role-kasir .owner-only { display: none !important; }
     background: var(--primary);
     color: white;
 }
+
+/* ========== MODERN CRUD BUTTONS ========== */
+.mutation-action-btns { 
+    display: flex; 
+    gap: 6px; 
+    justify-content: center;
+}
+
+.mutation-action-btns button {
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    background: var(--bg);
+    color: var(--text-light);
+}
+
+.mutation-action-btns button:hover { 
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+/* View button - Blue */
+.mutation-action-btns button.view-btn {
+    background: #dbeafe;
+    color: #2563eb;
+}
+.mutation-action-btns button.view-btn:hover {
+    background: #2563eb;
+    color: white;
+}
+
+/* Edit button - Amber */
+.mutation-action-btns button.edit-btn {
+    background: #fef3c7;
+    color: #d97706;
+}
+.mutation-action-btns button.edit-btn:hover {
+    background: #d97706;
+    color: white;
+}
+
+/* Delete button - Red */
+.mutation-action-btns button.delete-mut-btn {
+    background: #fee2e2;
+    color: #dc2626;
+}
+.mutation-action-btns button.delete-mut-btn:hover {
+    background: #dc2626;
+    color: white;
+}
+
+/* Order action buttons - same style */
+.order-action-btns { 
+    display: flex; 
+    gap: 6px; 
+    justify-content: center;
+}
+
+.order-action-btns button {
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    background: var(--bg);
+    color: var(--text-light);
+}
+
+.order-action-btns button:hover { 
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.order-action-btns button:first-child {
+    background: #dbeafe;
+    color: #2563eb;
+}
+.order-action-btns button:first-child:hover {
+    background: #2563eb;
+    color: white;
+}
+
+.order-action-btns button:nth-child(2) {
+    background: #fef3c7;
+    color: #d97706;
+}
+.order-action-btns button:nth-child(2):hover {
+    background: #d97706;
+    color: white;
+}
+
+.order-action-btns button.delete-btn {
+    background: #fee2e2;
+    color: #dc2626;
+}
+.order-action-btns button.delete-btn:hover {
+    background: #dc2626;
+    color: white;
+}
+
+/* ========== MODERN MODAL DESIGN ========== */
+.modal { 
+    background: white; 
+    border-radius: 20px; 
+    padding: 0;
+    width: 90%; 
+    max-width: 480px; 
+    max-height: 90vh; 
+    overflow: hidden;
+    transform: scale(0.9); 
+    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}
+
+.modal-overlay.active .modal { 
+    transform: scale(1); 
+}
+
+.modal-header { 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center; 
+    padding: 20px 24px;
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+    color: white;
+    border-bottom: none;
+}
+
+.modal-header h2 { 
+    font-size: 18px; 
+    font-weight: 700;
+    color: white;
+    margin: 0;
+}
+
+.modal-close { 
+    width: 32px; 
+    height: 32px; 
+    border-radius: 8px; 
+    border: none; 
+    background: rgba(255,255,255,0.2);
+    color: white;
+    cursor: pointer; 
+    display: flex; 
+    align-items: center; 
+    justify-content: center;
+    transition: 0.2s;
+    font-size: 16px;
+}
+
+.modal-close:hover { 
+    background: rgba(255,255,255,0.3);
+    transform: rotate(90deg);
+}
+
+.modal > div:not(.modal-header) {
+    padding: 24px;
+}
+
+/* Modal body padding for forms */
+.modal .input-group {
+    margin-bottom: 16px;
+}
+
+.modal .input-group label {
+    display: block;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-light);
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.modal .input-group input,
+.modal .input-group select,
+.modal .input-group textarea {
+    width: 100%;
+    padding: 12px 14px;
+    border: 2px solid var(--border);
+    border-radius: 10px;
+    font-size: 14px;
+    outline: none;
+    background: var(--bg);
+    transition: 0.2s;
+    font-family: inherit;
+}
+
+.modal .input-group input:focus,
+.modal .input-group select:focus,
+.modal .input-group textarea:focus {
+    border-color: var(--primary);
+    background: white;
+    box-shadow: 0 0 0 3px var(--primary-light);
+}
+
+.modal .add-to-cart-btn {
+    margin-top: 8px;
+    border-radius: 10px;
+    padding: 14px;
+    font-size: 14px;
+}
+
+/* Modal overlay backdrop */
+.modal-overlay { 
+    position: fixed; 
+    inset: 0; 
+    background: rgba(15, 23, 42, 0.6); 
+    backdrop-filter: blur(8px);
+    display: flex; 
+    align-items: center; 
+    justify-content: center; 
+    z-index: 9999; 
+    opacity: 0; 
+    visibility: hidden; 
+    transition: all 0.3s ease;
+}
+
+.modal-overlay.active { 
+    opacity: 1; 
+    visibility: visible; 
+}
+
+/* ========== MODERN TABLE ROWS ========== */
+.data-table tbody tr {
+    transition: all 0.2s ease;
+}
+
+.data-table tbody tr:hover {
+    background: var(--primary-50);
+    transform: scale(1.005);
+}
+
+.data-table td {
+    vertical-align: middle;
+}
+
+/* Badge modern */
+.badge {
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    letter-spacing: 0.3px;
+}
+
+.badge-success { 
+    background: linear-gradient(135deg, #d1fae5, #a7f3d0); 
+    color: #065f46; 
+}
+
+.badge-warning { 
+    background: linear-gradient(135deg, #fef3c7, #fde68a); 
+    color: #92400e; 
+}
+
+.badge-danger { 
+    background: linear-gradient(135deg, #fee2e2, #fecaca); 
+    color: #991b1b; 
+}
+
+.badge-info { 
+    background: linear-gradient(135deg, #dbeafe, #bfdbfe); 
+    color: #1e40af; 
+}
+
+/* ========== MODERN MUTATION DETAIL ========== */
+.mutation-detail-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px;
+}
+
+.mutation-detail-row:last-child {
+    border-bottom: none;
+}
+
+.mutation-detail-label {
+    color: var(--text-light);
+    font-weight: 500;
+    font-size: 13px;
+}
+
+.mutation-detail-value {
+    font-weight: 700;
+    color: var(--text);
+    font-size: 14px;
+}
+
+/* ========== MODERN EXPENSE HISTORY ========== */
+.expense-history-modal-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 14px 16px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    margin-bottom: 10px;
+    background: white;
+    transition: all 0.2s ease;
+}
+
+.expense-history-modal-item:hover {
+    border-color: var(--primary);
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.1);
+    transform: translateX(4px);
+}
+
+.expense-history-modal-item .exp-info { 
+    flex: 1; 
+}
+
+.expense-history-modal-item .exp-cat { 
+    font-weight: 700; 
+    color: var(--text); 
+    font-size: 14px;
+    margin-bottom: 2px;
+}
+
+.expense-history-modal-item .exp-desc { 
+    font-size: 12px; 
+    color: var(--text-light);
+    margin-top: 2px;
+}
+
+.expense-history-modal-item .exp-time { 
+    font-size: 11px; 
+    color: var(--text-light);
+    margin-top: 4px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.expense-history-modal-item .exp-amount { 
+    font-weight: 800; 
+    color: #ef4444; 
+    font-size: 15px;
+    margin: 0 16px;
+}
+
+.expense-history-modal-item .exp-actions { 
+    display: flex; 
+    gap: 6px; 
+}
+
+.expense-history-modal-item .exp-actions button {
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    background: var(--bg);
+    color: var(--text-light);
+}
+
+.expense-history-modal-item .exp-actions button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.expense-history-modal-item .exp-actions button:first-child {
+    background: #fef3c7;
+    color: #d97706;
+}
+
+.expense-history-modal-item .exp-actions button:first-child:hover {
+    background: #d97706;
+    color: white;
+}
+
+.expense-history-modal-item .exp-actions button.delete-exp-btn {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+.expense-history-modal-item .exp-actions button.delete-exp-btn:hover {
+    background: #dc2626;
+    color: white;
+}
+
+/* ========== MODERN TOAST ========== */
+.toast { 
+    position: fixed; 
+    bottom: 24px; 
+    right: 24px; 
+    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+    color: white; 
+    padding: 16px 24px; 
+    border-radius: 12px; 
+    transform: translateY(100px) scale(0.9); 
+    opacity: 0; 
+    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); 
+    z-index: 10000; 
+    font-weight: 600; 
+    box-shadow: 0 10px 25px rgba(16, 185, 129, 0.3);
+    font-size: 14px;
+}
+
+.toast.show { 
+    transform: translateY(0) scale(1); 
+    opacity: 1; 
+}
+
+.toast.error { 
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+    box-shadow: 0 10px 25px rgba(239, 68, 68, 0.3);
+}
+
+/* ========== MODERN STAT CARDS ========== */
+.stat-card { 
+    background: white; 
+    padding: 20px; 
+    border-radius: 16px; 
+    border: 1px solid var(--border); 
+    display: flex; 
+    align-items: center; 
+    gap: 16px; 
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 4px;
+    height: 100%;
+    background: var(--primary);
+    opacity: 0;
+    transition: opacity 0.3s;
+}
+
+.stat-card:hover { 
+    transform: translateY(-4px); 
+    box-shadow: 0 12px 24px rgba(0,0,0,0.08);
+    border-color: var(--primary-light);
+}
+
+.stat-card:hover::before {
+    opacity: 1;
+}
+
+.stat-icon { 
+    width: 56px; 
+    height: 56px; 
+    border-radius: 14px; 
+    display: flex; 
+    align-items: center; 
+    justify-content: center; 
+    font-size: 24px; 
+    flex-shrink: 0; 
+    background: linear-gradient(135deg, var(--primary-light), var(--primary-50));
+    color: var(--primary-dark);
+}
+
+.stat-info { 
+    flex: 1; 
+    min-width: 0; 
+}
+
+.stat-label { 
+    font-size: 12px; 
+    color: var(--text-light); 
+    margin-bottom: 4px; 
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.stat-value { 
+    font-size: 24px; 
+    font-weight: 800; 
+    color: var(--text);
+    letter-spacing: -0.5px;
+}
+
+/* ========== MODERN CASH CARDS ========== */
+.cash-card { 
+    background: white; 
+    padding: 24px; 
+    border-radius: 16px; 
+    border: 1px solid var(--border); 
+    border-left: 4px solid var(--primary); 
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.cash-card::after {
+    content: '';
+    position: absolute;
+    top: -50%;
+    right: -50%;
+    width: 100%;
+    height: 100%;
+    background: radial-gradient(circle, var(--primary-light) 0%, transparent 70%);
+    opacity: 0;
+    transition: opacity 0.3s;
+}
+
+.cash-card:hover { 
+    transform: translateY(-4px); 
+    box-shadow: 0 12px 24px rgba(0,0,0,0.08);
+}
+
+.cash-card:hover::after {
+    opacity: 0.3;
+}
+
+.cash-card h4 { 
+    font-size: 13px; 
+    color: var(--text-light); 
+    margin-bottom: 8px; 
+    font-weight: 600; 
+    display: flex; 
+    align-items: center; 
+    gap: 8px;
+    position: relative;
+    z-index: 1;
+}
+
+.cash-card .balance { 
+    font-size: 26px; 
+    font-weight: 800; 
+    color: var(--text);
+    margin-bottom: 16px;
+    letter-spacing: -0.5px;
+    position: relative;
+    z-index: 1;
+}
+
+.cash-card-actions { 
+    display: flex; 
+    gap: 8px; 
+    flex-wrap: wrap;
+    position: relative;
+    z-index: 1;
+}
+
+.cash-action-btn { 
+    flex: 1; 
+    padding: 10px 12px; 
+    border: 1px solid var(--border); 
+    border-radius: 10px; 
+    background: white; 
+    cursor: pointer; 
+    font-size: 12px; 
+    font-weight: 600; 
+    color: var(--text-light); 
+    transition: all 0.2s ease; 
+    display: flex; 
+    align-items: center; 
+    justify-content: center; 
+    gap: 6px;
+    min-width: 100px;
+}
+
+.cash-action-btn:hover { 
+    background: var(--primary-light); 
+    color: var(--primary-dark); 
+    border-color: var(--primary);
+    transform: translateY(-2px);
+}
+
+.cash-action-btn.primary { 
+    background: linear-gradient(135deg, var(--primary), var(--primary-dark)); 
+    color: white; 
+    border-color: var(--primary);
+}
+
+.cash-action-btn.primary:hover { 
+    background: linear-gradient(135deg, var(--primary-dark), #047857);
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+}
+
+/* ========== MODERN BUTTONS ========== */
+.btn-primary { 
+    padding: 10px 18px; 
+    border: none; 
+    border-radius: 10px; 
+    cursor: pointer; 
+    font-weight: 600; 
+    font-size: 13px; 
+    display: flex; 
+    align-items: center; 
+    gap: 8px; 
+    transition: all 0.2s ease;
+    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+    color: white;
+}
+
+.btn-primary:hover { 
+    transform: translateY(-2px);
+    box-shadow: 0 8px 16px rgba(16, 185, 129, 0.3);
+}
+
+.btn-secondary { 
+    padding: 10px 18px; 
+    border: 1px solid var(--border); 
+    border-radius: 10px; 
+    cursor: pointer; 
+    font-weight: 600; 
+    font-size: 13px; 
+    display: flex; 
+    align-items: center; 
+    gap: 8px; 
+    transition: all 0.2s ease;
+    background: white;
+    color: var(--text);
+}
+
+.btn-secondary:hover { 
+    background: var(--bg);
+    border-color: var(--primary);
+    color: var(--primary);
+    transform: translateY(-2px);
+}
+
+/* ========== MODERN DATE FILTER ========== */
+.date-range-filter {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: white;
+    padding: 10px 16px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    font-size: 13px;
+    transition: all 0.2s;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+.date-range-filter:hover { 
+    border-color: var(--primary);
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.1);
+}
+
+.date-range-filter i { 
+    color: var(--primary); 
+    font-size: 14px; 
+}
+
+.date-range-filter input { 
+    border: none; 
+    outline: none; 
+    font-size: 13px; 
+    color: var(--text); 
+    background: transparent; 
+    font-family: inherit;
+    font-weight: 500;
+}
+
+.date-range-filter input:focus { 
+    color: var(--primary); 
+}
+
+.date-range-filter span { 
+    color: var(--text-light); 
+    font-size: 12px; 
+    font-weight: 500; 
+}
+
+/* ========== MODERN TABLE ========== */
+.table-container { 
+    background: white; 
+    border-radius: 16px; 
+    border: 1px solid var(--border); 
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+
+.data-table { 
+    width: 100%; 
+    border-collapse: collapse; 
+}
+
+.data-table th { 
+    background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+    font-weight: 700; 
+    color: var(--text-light); 
+    font-size: 11px; 
+    text-transform: uppercase; 
+    letter-spacing: 0.5px;
+    padding: 14px 16px;
+    border-bottom: 2px solid var(--border);
+}
+
+.data-table td { 
+    padding: 14px 16px; 
+    border-bottom: 1px solid var(--border); 
+    font-size: 13px;
+}
+
+.data-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.data-table tbody tr {
+    transition: all 0.2s ease;
+}
+
+.data-table tbody tr:hover { 
+    background: var(--primary-50);
+}
+
+/* ========== MODERN RECEIPT ========== */
+.receipt-modal { 
+    max-width: 400px; 
+}
+
+.receipt-content { 
+    background: white; 
+    padding: 24px; 
+    border: 2px dashed var(--border); 
+    border-radius: 12px; 
+    margin-bottom: 16px; 
+    font-family: 'Courier New', monospace; 
+    font-size: 13px; 
+    line-height: 1.6;
+}
+
+.receipt-header { 
+    text-align: center; 
+    margin-bottom: 16px; 
+    padding-bottom: 16px;
+    border-bottom: 2px dashed var(--border);
+}
+
+.receipt-header h3 { 
+    font-size: 20px; 
+    margin-bottom: 6px;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    font-weight: 800;
+}
+
+.receipt-item { 
+    display: flex; 
+    justify-content: space-between; 
+    margin-bottom: 6px; 
+}
+
+.receipt-total { 
+    border-top: 2px dashed var(--border); 
+    padding-top: 12px; 
+    margin-top: 12px;
+    font-weight: 700;
+}
+
+.print-btn { 
+    width: 100%; 
+    padding: 14px; 
+    background: linear-gradient(135deg, var(--text), #1e293b); 
+    color: white; 
+    border: none; 
+    border-radius: 10px; 
+    cursor: pointer; 
+    font-weight: 600; 
+    display: flex; 
+    align-items: center; 
+    justify-content: center; 
+    gap: 8px;
+    transition: all 0.2s;
+    font-size: 14px;
+}
+
+.print-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 16px rgba(0,0,0,0.2);
+}
+
+/* ========== MODERN PAYMENT MODAL ========== */
+.payment-modal { 
+    max-width: 440px; 
+}
+
+.payment-amount { 
+    text-align: center; 
+    padding: 24px; 
+    background: linear-gradient(135deg, var(--primary-light) 0%, white 100%); 
+    border-radius: 16px; 
+    margin-bottom: 24px; 
+    border: 2px solid var(--primary);
+}
+
+.amount-label { 
+    font-size: 12px; 
+    color: var(--text-light); 
+    margin-bottom: 8px; 
+    text-transform: uppercase; 
+    font-weight: 700;
+    letter-spacing: 1px;
+}
+
+.amount-value { 
+    font-size: 36px; 
+    font-weight: 800; 
+    color: var(--primary-dark);
+    letter-spacing: -1px;
+}
+
+.payment-methods { 
+    display: grid; 
+    grid-template-columns: repeat(3, 1fr); 
+    gap: 10px; 
+    margin-bottom: 24px; 
+}
+
+.method-btn { 
+    padding: 16px 12px; 
+    border: 2px solid var(--border); 
+    border-radius: 12px; 
+    background: white; 
+    cursor: pointer; 
+    font-weight: 600; 
+    font-size: 13px; 
+    display: flex; 
+    flex-direction: column; 
+    align-items: center; 
+    gap: 8px; 
+    transition: all 0.2s ease;
+}
+
+.method-btn i { 
+    font-size: 24px; 
+}
+
+.method-btn:hover { 
+    border-color: var(--primary);
+    transform: translateY(-2px);
+}
+
+.method-btn.active { 
+    border-color: var(--primary); 
+    background: var(--primary-light); 
+    color: var(--primary-dark);
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+}
+
+.quick-cash { 
+    display: grid; 
+    grid-template-columns: repeat(3, 1fr); 
+    gap: 10px; 
+    margin-top: 16px; 
+}
+
+.quick-cash button { 
+    padding: 12px; 
+    border: 2px solid var(--border); 
+    border-radius: 10px; 
+    background: white; 
+    cursor: pointer; 
+    font-weight: 700; 
+    font-size: 14px; 
+    transition: all 0.2s ease;
+}
+
+.quick-cash button:hover { 
+    background: var(--primary); 
+    color: white; 
+    border-color: var(--primary);
+    transform: translateY(-2px);
+}
+
+.change-display { 
+    text-align: center; 
+    margin-top: 20px; 
+    padding: 18px; 
+    background: linear-gradient(135deg, var(--primary-light), white); 
+    border-radius: 12px; 
+    border: 2px solid var(--primary);
+}
+
+.change-label { 
+    font-size: 11px; 
+    color: var(--text-light); 
+    margin-bottom: 6px; 
+    text-transform: uppercase; 
+    font-weight: 700;
+    letter-spacing: 1px;
+}
+
+.change-value { 
+    font-size: 28px; 
+    font-weight: 800; 
+    color: var(--primary-dark);
+    letter-spacing: -0.5px;
+}
+
+.confirm-payment-btn { 
+    width: 100%; 
+    padding: 16px; 
+    background: linear-gradient(135deg, var(--primary), var(--primary-dark)); 
+    color: white; 
+    border: none; 
+    border-radius: 12px; 
+    font-size: 16px; 
+    font-weight: 700; 
+    cursor: pointer; 
+    transition: all 0.2s ease;
+    margin-top: 8px;
+}
+
+.confirm-payment-btn:hover { 
+    transform: translateY(-2px); 
+    box-shadow: 0 12px 24px rgba(16, 185, 129, 0.3);
+}
+
+/* ========== RESPONSIVE ========== */
+@media (max-width: 768px) {
+    .mutation-action-btns,
+    .order-action-btns {
+        flex-direction: column;
+        gap: 4px;
+    }
+    
+    .mutation-action-btns button,
+    .order-action-btns button {
+        width: 28px;
+        height: 28px;
+        font-size: 11px;
+    }
+}
