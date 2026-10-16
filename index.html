@@ -115,7 +115,7 @@
                             <div class="categories" id="categoriesContainer"></div>
                             <div class="products-grid" id="productsGrid"></div>
                         </div>
-                        <div class="kasir-right">
+                        <div class="kasir-right" id="kasirRightPanel">
                             <div class="order-header"><div><h3>Order Aktif</h3><p id="orderNumber">#NEW</p></div><button class="btn-hold" onclick="window.showHoldOrders()"><i class="fas fa-pause"></i></button></div>
                             <div class="order-type-toggle"><button class="type-btn active" onclick="window.setOrderType('dine_in', this)">Dine In</button><button class="type-btn" onclick="window.setOrderType('takeaway', this)">Take Away</button></div>
                             <div class="customer-info"><div class="input-group"><label>Nama</label><input type="text" id="customerName" placeholder="Customer"></div><div class="input-group"><label>Meja</label><input type="text" id="tableNumber" placeholder="Table 1"></div></div>
@@ -135,6 +135,10 @@
                             <button class="daily-report-btn" onclick="window.showDailyReport()"><i class="fas fa-chart-bar"></i> Laporan Hari Ini</button>
                         </div>
                     </div>
+                    <button class="mobile-cart-bar" id="mobileCartBar" type="button" onclick="window.scrollToCart()" disabled>
+                        <span><i class="fas fa-basket-shopping"></i> <span id="mobileCartCount">0 item</span></span>
+                        <span class="mobile-cart-total"><span>Total</span> <b id="mobileCartTotal">Rp 0</b> <i class="fas fa-arrow-up"></i></span>
+                    </button>
                 </div>
 
                 <div id="page-orders" class="page">
