@@ -154,6 +154,48 @@ window.showDailyReport = async function() {
             const cashSales = totalRevenue - qrisSales - debitSales;
             const cashierExpenses = expenses.filter(expense => expense.cash_sources?.name === 'Cash Kasir').reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
             const cashierBalanceToday = cashSales - cashierExpenses;
+            content.innerHTML =
+                '<div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-bottom:16px">' +
+                    '<div class="stat-card"><div class="stat-info"><div class="stat-label">TOTAL PENJUALAN</div><div class="stat-value" style="font-size:18px">' + formatRp(totalRevenue) + '</div></div></div>' +
+                    '<div class="stat-card"><div class="stat-info"><div class="stat-label">CASH KASIR</div><div class="stat-value" style="font-size:16px;color:' + (cashierBalanceToday >= 0 ? 'var(--primary)' : '#ef4444') + '">' + formatRp(cashierBalanceToday) + '</div></div></div>' +
+                    '<div class="stat-card"><div class="stat-info"><div class="stat-label">TOTAL PENGELUARAN</div><div class="stat-value" style="font-size:16px;color:#ef4444">' + formatRp(totalExpenses) + '</div></div></div>' +
+                '</div>' +
+                '<h4 style="margin:16px 0 10px">Pembayaran</h4>' +
+                '<div style="background:var(--bg);padding:12px;border-radius:8px">' +
+                    '<div style="display:flex;justify-content:space-between;padding:6px 0"><span>Cash</span><b>' + formatRp(cashSales) + '</b></div>' +
+                    '<div style="display:flex;justify-content:space-between;padding:6px 0"><span>QRIS</span><b>' + formatRp(qrisSales) + '</b></div>' +
+                    '<div style="display:flex;justify-content:space-between;padding:6px 0"><span>Debit</span><b>' + formatRp(debitSales) + '</b></div>' +
+                '</div>' +
+                '<h4 style="margin:16px 0 10px">Daftar Order Hari Ini</h4>' +
+                '<div style="max-height:200px;overflow-y:auto">' +
+                    (orders.map(order => '<div style="display:flex;justify-content:space-between;padding:8px;border-bottom:1px solid var(--border);font-size:12px"><span><b>' + order.order_number + '</b> - ' + (order.customer_name || 'Walk-in') + '</span><b>' + formatRp(order.total) + '</b></div>').join('') || '<p style="color:var(--text-light);text-align:center;padding:20px">Belum ada order</p>') +
+                '</div>';
+        } catch (error) {
+            content.innerHTML = '<p style="color:#ef4444;text-align:center">Gagal memuat: ' + error.message + '</p>';
+        }
+    };
+        const today = getTodayJakarta();
+        const dayStart = today + 'T00:00:00+07:00';
+        const dayEnd = new Date(new Date(dayStart).getTime() + 24 * 60 * 60 * 1000).toISOString();
+        const content = document.getElementById('dailyReportContent');
+        content.innerHTML = '<div style="text-align:center;padding:20px">Memuat...</div>';
+        document.getElementById('dailyReportModal').classList.add('active');
+        try {
+            const [orderResult, expenseResult] = await Promise.all([
+                supabase.from('orders').select('*').gte('created_at', dayStart).lt('created_at', dayEnd).eq('status', 'paid'),
+                supabase.from('expenses').select('amount, cash_sources(name)').gte('created_at', dayStart).lt('created_at', dayEnd)
+            ]);
+            if (orderResult.error) throw orderResult.error;
+            if (expenseResult.error) throw expenseResult.error;
+            const orders = orderResult.data || [];
+            const expenses = expenseResult.data || [];
+            const totalRevenue = orders.reduce((sum, order) => sum + Number(order.total || 0), 0);
+            const totalExpenses = expenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+            const qrisSales = orders.filter(order => order.payment_method === 'qris').reduce((sum, order) => sum + Number(order.total || 0), 0);
+            const debitSales = orders.filter(order => order.payment_method === 'debit').reduce((sum, order) => sum + Number(order.total || 0), 0);
+            const cashSales = totalRevenue - qrisSales - debitSales;
+            const cashierExpenses = expenses.filter(expense => expense.cash_sources?.name === 'Cash Kasir').reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+            const cashierBalanceToday = cashSales - cashierExpenses;
             const netProfit = totalRevenue - totalExpenses;
             content.innerHTML =
                 '<div class="stats-grid" style="grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">' +
