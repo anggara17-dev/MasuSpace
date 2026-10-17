@@ -5,6 +5,10 @@
     document.addEventListener('submit', function(e) { e.preventDefault(); return false; });
 
     let state = { currentUser: null, currentPage: 'dashboard', cart: [], categories: [], products: [], variants: [], addons: [], modalProduct: null, modalVariant: { suhu: 'Hot', ukuran: 'Regular' }, modalAddons: [], modalQty: 1, paymentMethod: 'cash', cashReceived: 0, discount: { type: 'percent', value: 0 }, orderType: 'dine_in', currentReceipt: null, kasirExpenses: [], ingredients: [], pendingPhotoBase64: null };
+    let dashboardRequestId = 0;
+    let dashboardFilterTimer;
+    let orderRequestId = 0;
+    let orderFilterTimer;
 
     function formatRp(num) { return 'Rp ' + Math.round(num || 0).toLocaleString('id-ID'); }
     function escapeHtml(value) { return String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char])); }
@@ -71,6 +75,7 @@
     setInterval(updateClock, 1000); updateClock();
 
     async function loadDashboard() {
+        const requestId = ++dashboardRequestId;
         const today = getTodayJakarta();
         const startInput = document.getElementById('dashboardStartDate');
         const endInput = document.getElementById('dashboardEndDate');
@@ -88,6 +93,7 @@
                 supabase.rpc('get_cash_sources'),
                 supabase.rpc('get_inventory_summary')
             ]);
+            if (requestId !== dashboardRequestId) return;
             if (ordersResult.error) throw ordersResult.error;
             if (expensesResult.error) throw expensesResult.error;
             if (cashResult.error) throw cashResult.error;
@@ -101,6 +107,7 @@
                 if (error) throw error;
                 productItems = data || [];
             }
+            if (requestId !== dashboardRequestId) return;
             const totalOrders = orders.length;
             const totalRevenue = orders.reduce((sum, order) => sum + Number(order.total || 0), 0);
             const totalExpense = expenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
@@ -136,8 +143,12 @@
                 : '<p style="color:var(--text-light);text-align:center;padding:20px">Belum ada penjualan pada periode ini</p>';
         } catch (error) { console.error(error); showToast('Gagal memuat dashboard: ' + error.message, true); }
     }
-    window.applyDashboardFilter = function() { loadDashboard(); };
+    window.applyDashboardFilter = function() {
+        clearTimeout(dashboardFilterTimer);
+        dashboardFilterTimer = setTimeout(loadDashboard, 180);
+    };
     window.resetDashboardFilter = function() {
+        clearTimeout(dashboardFilterTimer);
         const today = getTodayJakarta();
         document.getElementById('dashboardStartDate').value = today;
         document.getElementById('dashboardEndDate').value = today;
@@ -234,6 +245,7 @@
         } catch (error) { content.innerHTML = '<p style="color:#ef4444;text-align:center">Gagal memuat: ' + error.message + '</p>'; }
     };
     async function loadOrders() {
+        const requestId = ++orderRequestId;
         const start = document.getElementById('orderFilterStart')?.value;
         const end = document.getElementById('orderFilterEnd')?.value;
         if (start && end && start > end) { showToast('Tanggal awal tidak boleh melewati tanggal akhir.', true); return; }
@@ -244,6 +256,7 @@
             if (start) query = query.gte('created_at', start + 'T00:00:00+07:00');
             if (end) query = query.lt('created_at', new Date(new Date(end + 'T00:00:00+07:00').getTime() + 24 * 60 * 60 * 1000).toISOString());
             const { data: orderData, error } = await query;
+            if (requestId !== orderRequestId) return;
             if (error) throw error;
             const orders = orderData || [];
             if (!orders.length) {
@@ -253,6 +266,7 @@
             }
             const orderIds = orders.map(order => order.id);
             const { data: itemData, error: itemError } = await supabase.from('order_items').select('order_id,qty,products(name)').in('order_id', orderIds);
+            if (requestId !== orderRequestId) return;
             if (itemError) throw itemError;
             const menuByOrder = new Map();
             (itemData || []).forEach(item => {
@@ -273,12 +287,19 @@
             }).join('');
             document.getElementById('ordersSummary').innerHTML = `<div class="stats-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px"><div class="stat-card"><div class="stat-info"><div class="stat-label">Total Order</div><div class="stat-value">${orders.length}</div></div></div><div class="stat-card"><div class="stat-info"><div class="stat-label">Cash</div><div class="stat-value">${formatRp(totalCash)}</div></div></div><div class="stat-card"><div class="stat-info"><div class="stat-label">Non-Tunai</div><div class="stat-value">${formatRp(totalNonCash)}</div></div></div><div class="stat-card"><div class="stat-info"><div class="stat-label">Total Penjualan</div><div class="stat-value">${formatRp(totalRevenue)}</div></div></div></div>`;
         } catch (error) {
+            if (requestId !== orderRequestId) return;
             console.error(error);
             tableBody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:#ef4444">Gagal memuat riwayat order. Silakan coba lagi.</td></tr>';
             showToast('Gagal memuat riwayat order: ' + error.message, true);
         }
     }
-    window.loadOrders = loadOrders; window.resetOrderFilter = function() { document.getElementById('orderFilterStart').value = ''; document.getElementById('orderFilterEnd').value = ''; loadOrders(); };
+    window.loadOrders = loadOrders;
+    window.resetOrderFilter = function() {
+        clearTimeout(orderFilterTimer);
+        document.getElementById('orderFilterStart').value = '';
+        document.getElementById('orderFilterEnd').value = '';
+        loadOrders();
+    };
     window.viewOrderDetail = async function(orderId) { const { data: order } = await supabase.from('orders').select('*, app_users(full_name)').eq('id', orderId).single(); const { data: items } = await supabase.from('order_items').select('*, products(name)').eq('order_id', orderId); if (!order) { showToast('Order tidak ditemukan', true); return; } const sub = (items || []).reduce((s, i) => s + (i.unit_price * i.qty), 0); let html = `<div class="receipt-header"><h3>☕ MASUSPACE</h3><p>Coffee Shop</p><p style="font-size:10px;margin-top:8px">${new Date(order.created_at).toLocaleString('id-ID')}</p><p style="font-size:10px">${order.order_number}</p><p style="font-size:10px">Kasir: ${order.app_users?.full_name || '-'}</p><p style="font-size:10px">Customer: ${order.customer_name || 'Walk-in'}</p></div><div style="margin-bottom:10px">${(items || []).map(i => `<div class="receipt-item"><div>${i.products?.name || 'Product'} x${i.qty}</div><div>${formatRp(i.unit_price * i.qty)}</div></div>`).join('')}</div><div class="receipt-total"><div class="receipt-item"><span>Subtotal</span><span>${formatRp(sub)}</span></div>${order.discount_amount > 0 ? `<div class="receipt-item"><span>Diskon</span><span>-${formatRp(order.discount_amount)}</span></div>` : ''}<div class="receipt-item" style="font-size:14px"><span>TOTAL</span><span>${formatRp(order.total)}</span></div><div class="receipt-item"><span>Bayar (${(order.payment_method||'cash').toUpperCase()})</span><span>${formatRp(order.paid_amount)}</span></div>${order.payment_method === 'cash' ? `<div class="receipt-item"><span>Kembali</span><span>${formatRp(order.change_amount)}</span></div>` : ''}</div><div style="text-align:center;margin-top:12px;font-size:10px"><p>━━━━━━━━━━━━━━━━━━━</p><p>Terima kasih!</p></div>`; document.getElementById('orderDetailContent').innerHTML = html; document.getElementById('orderDetailModal').classList.add('active'); };
     window.printOrderDetail = function() { const content = document.getElementById('orderDetailContent').innerHTML; const w = window.open('', '', 'width=400,height=600'); w.document.write(`<html><head><title>Struk</title><style>body{font-family:'Courier New',monospace;font-size:12px;padding:20px;} .receipt-item{display:flex;justify-content:space-between;margin-bottom:4px;} .receipt-header{text-align:center;margin-bottom:12px;border-bottom:1px dashed #000;padding-bottom:12px;} .receipt-total{border-top:1px dashed #000;padding-top:8px;font-weight:bold;}</style></head><body>${content}</body></html>`); w.document.close(); w.print(); };
     window.editOrder = async function(orderId) { const { data: order } = await supabase.from('orders').select('*').eq('id', orderId).single(); if (!order) return; const newStatus = prompt(`Edit status order ${order.order_number}:\n(paid/held/cancelled)`, order.status); if (newStatus && ['paid', 'held', 'cancelled'].includes(newStatus)) { const { error } = await supabase.from('orders').update({ status: newStatus, updated_at: new Date().toISOString() }).eq('id', orderId); if (error) { showToast('Gagal: ' + error.message, true); return; } showToast('Order diupdate!'); await loadOrders(); } };
@@ -632,6 +653,9 @@
     document.addEventListener('DOMContentLoaded', function() {
         loadUsersToDropdown();
         ['dashboardStartDate', 'dashboardEndDate'].forEach(id => document.getElementById(id)?.addEventListener('change', window.applyDashboardFilter));
-        ['orderFilterStart', 'orderFilterEnd'].forEach(id => document.getElementById(id)?.addEventListener('change', () => loadOrders()));
+        ['orderFilterStart', 'orderFilterEnd'].forEach(id => document.getElementById(id)?.addEventListener('change', () => {
+            clearTimeout(orderFilterTimer);
+            orderFilterTimer = setTimeout(loadOrders, 180);
+        }));
         const loginForm = document.getElementById('loginForm'); if (loginForm) { loginForm.addEventListener('submit', function(e) { e.preventDefault(); window.handleLogin(e); }); } });
 })();
