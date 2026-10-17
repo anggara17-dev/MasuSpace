@@ -7,6 +7,7 @@
     let state = { currentUser: null, currentPage: 'dashboard', cart: [], categories: [], products: [], variants: [], addons: [], modalProduct: null, modalVariant: { suhu: 'Hot', ukuran: 'Regular' }, modalAddons: [], modalQty: 1, paymentMethod: 'cash', cashReceived: 0, discount: { type: 'percent', value: 0 }, orderType: 'dine_in', currentReceipt: null, kasirExpenses: [], ingredients: [], pendingPhotoBase64: null };
 
     function formatRp(num) { return 'Rp ' + Math.round(num || 0).toLocaleString('id-ID'); }
+    function escapeHtml(value) { return String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char])); }
     function getJakartaDateParts(date = new Date()) { return Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date).filter(part => part.type !== 'literal').map(part => [part.type, part.value])); }
     function getTodayJakarta() { const { year, month, day } = getJakartaDateParts(); return `${year}-${month}-${day}`; }
     function getJakartaMonthStart() { const { year, month } = getJakartaDateParts(); return `${year}-${month}-01`; }
@@ -82,7 +83,7 @@
         const rangeEndExclusive = new Date(new Date(endDate + 'T00:00:00+07:00').getTime() + 24 * 60 * 60 * 1000).toISOString();
         try {
             const [ordersResult, expensesResult, cashResult, inventoryResult] = await Promise.all([
-                supabase.from('orders').select('*').gte('created_at', rangeStart).lt('created_at', rangeEndExclusive).eq('status', 'paid'),
+                supabase.from('orders').select('id,total,payment_method').gte('created_at', rangeStart).lt('created_at', rangeEndExclusive).eq('status', 'paid'),
                 supabase.from('expenses').select('amount').gte('created_at', rangeStart).lt('created_at', rangeEndExclusive),
                 supabase.rpc('get_cash_sources'),
                 supabase.rpc('get_inventory_summary')
@@ -93,25 +94,46 @@
             if (inventoryResult.error) throw inventoryResult.error;
             const orders = ordersResult.data || [];
             const expenses = expensesResult.data || [];
+            const orderIds = orders.map(order => order.id);
+            let productItems = [];
+            if (orderIds.length) {
+                const { data, error } = await supabase.from('order_items').select('order_id,qty,products(name)').in('order_id', orderIds);
+                if (error) throw error;
+                productItems = data || [];
+            }
             const totalOrders = orders.length;
             const totalRevenue = orders.reduce((sum, order) => sum + Number(order.total || 0), 0);
             const totalExpense = expenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
             const netProfit = totalRevenue - totalExpense;
-            const cashSales = orders.filter(order => order.payment_method === 'cash').reduce((sum, order) => sum + Number(order.total || 0), 0);
-            const qrisSales = orders.filter(order => order.payment_method === 'qris').reduce((sum, order) => sum + Number(order.total || 0), 0);
-            const debitSales = orders.filter(order => order.payment_method === 'debit').reduce((sum, order) => sum + Number(order.total || 0), 0);
+            const paymentTotals = orders.reduce((totals, order) => {
+                const method = order.payment_method;
+                if (method === 'cash' || method === 'qris' || method === 'debit') totals[method] += Number(order.total || 0);
+                return totals;
+            }, { cash: 0, qris: 0, debit: 0 });
             document.getElementById('statOrders').innerText = totalOrders;
             document.getElementById('statRevenue').innerText = formatRp(totalRevenue);
             document.getElementById('statExpense').innerText = formatRp(totalExpense);
             document.getElementById('statProfit').innerText = formatRp(netProfit);
             document.getElementById('statProfit').style.color = netProfit >= 0 ? 'var(--primary-dark)' : '#ef4444';
-            const laci = (cashResult.data || []).find(source => source.name === 'Cash Kasir');
-            document.getElementById('statCash').innerText = formatRp(laci?.current_balance || 0);
+            const cashier = (cashResult.data || []).find(source => source.name === 'Cash Kasir');
+            document.getElementById('statCash').innerText = formatRp(cashier?.current_balance || 0);
             document.getElementById('statLowStock').innerText = ((inventoryResult.data?.low_stock || 0) + (inventoryResult.data?.out_of_stock || 0));
+            const isToday = startDate === today && endDate === today;
             const paymentTitle = document.getElementById('dashboardPaymentTitle');
-            if (paymentTitle) paymentTitle.innerText = startDate === today && endDate === today ? 'Pembayaran Hari Ini' : 'Pembayaran Periode';
-            document.getElementById('dashPaymentMethods').innerHTML = `<div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)"><span><i class="fas fa-money-bill-wave" style="color:var(--primary);margin-right:8px"></i>Cash</span><b>${formatRp(cashSales)}</b></div><div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)"><span><i class="fas fa-qrcode" style="color:var(--primary);margin-right:8px"></i>QRIS</span><b>${formatRp(qrisSales)}</b></div><div style="display:flex;justify-content:space-between;padding:10px 0"><span><i class="fas fa-credit-card" style="color:var(--primary);margin-right:8px"></i>Debit</span><b>${formatRp(debitSales)}</b></div>`;
-            document.getElementById('dashTopProducts').innerHTML = '<p style="color:var(--text-light);text-align:center;padding:20px">Fitur top products akan ditampilkan di sini</p>';
+            if (paymentTitle) paymentTitle.innerText = isToday ? 'Pembayaran Hari Ini' : 'Pembayaran Periode';
+            document.getElementById('dashPaymentMethods').innerHTML =
+                `<div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)"><span><i class="fas fa-money-bill-wave" style="color:var(--primary);margin-right:8px"></i>Cash</span><b>${formatRp(paymentTotals.cash)}</b></div><div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)"><span><i class="fas fa-qrcode" style="color:var(--primary);margin-right:8px"></i>QRIS</span><b>${formatRp(paymentTotals.qris)}</b></div><div style="display:flex;justify-content:space-between;padding:10px 0"><span><i class="fas fa-credit-card" style="color:var(--primary);margin-right:8px"></i>Debit</span><b>${formatRp(paymentTotals.debit)}</b></div>`;
+            const bestSellers = new Map();
+            productItems.forEach(item => {
+                const name = item.products?.name || 'Produk';
+                const current = bestSellers.get(name) || { qty: 0 };
+                current.qty += Number(item.qty || 0);
+                bestSellers.set(name, current);
+            });
+            const topProducts = [...bestSellers.entries()].sort((a, b) => b[1].qty - a[1].qty).slice(0, 5);
+            document.getElementById('dashTopProducts').innerHTML = topProducts.length
+                ? topProducts.map(([name, info], index) => `<div style="display:flex;justify-content:space-between;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)"><span>${index + 1}. ${escapeHtml(name)}</span><b>${info.qty} terjual</b></div>`).join('')
+                : '<p style="color:var(--text-light);text-align:center;padding:20px">Belum ada penjualan pada periode ini</p>';
         } catch (error) { console.error(error); showToast('Gagal memuat dashboard: ' + error.message, true); }
     }
     window.applyDashboardFilter = function() { loadDashboard(); };
@@ -211,7 +233,49 @@
                 '</div>';
         } catch (error) { content.innerHTML = '<p style="color:#ef4444;text-align:center">Gagal memuat: ' + error.message + '</p>'; }
     };
-     async function loadOrders() { const start = document.getElementById('orderFilterStart')?.value; const end = document.getElementById('orderFilterEnd')?.value; let query = supabase.from('orders').select('*, app_users(full_name)').order('created_at', { ascending: false }).limit(100); if (start) query = query.gte('created_at', start + 'T00:00:00+07:00'); if (end) query = query.lte('created_at', end + 'T23:59:59+07:00'); const { data } = await query; const orders = data || []; const tbody = document.getElementById('ordersTableBody'); if (orders.length === 0) { tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--text-light)">Tidak ada data</td></tr>'; document.getElementById('ordersSummary').innerHTML = ''; return; } let totalRev = 0, totalCash = 0, totalNonCash = 0; tbody.innerHTML = orders.map(o => { totalRev += parseFloat(o.total); if (o.payment_method === 'cash') totalCash += parseFloat(o.total); else totalNonCash += parseFloat(o.total); return `<tr><td><b>${o.order_number}</b></td><td>${new Date(o.created_at).toLocaleDateString('id-ID')}</td><td><span class="badge badge-info">${o.order_type}</span></td><td>${o.customer_name || '-'}</td><td>${o.app_users?.full_name || '-'}</td><td><span class="badge badge-${o.payment_method==='cash'?'success':o.payment_method==='qris'?'info':'warning'}">${(o.payment_method||'-').toUpperCase()}</span></td><td><b>${formatRp(o.total)}</b></td><td><span class="badge badge-${o.status==='paid'?'success':'warning'}">${o.status}</span></td><td class="order-action-btns"><button onclick="window.viewOrderDetail('${o.id}')" title="Lihat & Cetak"><i class="fas fa-eye"></i></button><button onclick="window.editOrder('${o.id}')" title="Edit"><i class="fas fa-edit"></i></button><button class="delete-btn" onclick="window.deleteOrder('${o.id}')" title="Hapus"><i class="fas fa-trash"></i></button></td></tr>`; }).join(''); document.getElementById('ordersSummary').innerHTML = `<div class="stats-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px"><div class="stat-card"><div class="stat-info"><div class="stat-label">Total Order</div><div class="stat-value">${orders.length}</div></div></div><div class="stat-card"><div class="stat-info"><div class="stat-label">Cash</div><div class="stat-value">${formatRp(totalCash)}</div></div></div><div class="stat-card"><div class="stat-info"><div class="stat-label">Non-Tunai</div><div class="stat-value">${formatRp(totalNonCash)}</div></div></div></div>`; }
+    async function loadOrders() {
+        const start = document.getElementById('orderFilterStart')?.value;
+        const end = document.getElementById('orderFilterEnd')?.value;
+        if (start && end && start > end) { showToast('Tanggal awal tidak boleh melewati tanggal akhir.', true); return; }
+        const tableBody = document.getElementById('ordersTableBody');
+        tableBody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px">Memuat riwayat order...</td></tr>';
+        try {
+            let query = supabase.from('orders').select('*').order('created_at', { ascending: false }).limit(100);
+            if (start) query = query.gte('created_at', start + 'T00:00:00+07:00');
+            if (end) query = query.lt('created_at', new Date(new Date(end + 'T00:00:00+07:00').getTime() + 24 * 60 * 60 * 1000).toISOString());
+            const { data: orderData, error } = await query;
+            if (error) throw error;
+            const orders = orderData || [];
+            if (!orders.length) {
+                tableBody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text-light)">Tidak ada data</td></tr>';
+                document.getElementById('ordersSummary').innerHTML = '';
+                return;
+            }
+            const orderIds = orders.map(order => order.id);
+            const { data: itemData, error: itemError } = await supabase.from('order_items').select('order_id,qty,products(name)').in('order_id', orderIds);
+            if (itemError) throw itemError;
+            const menuByOrder = new Map();
+            (itemData || []).forEach(item => {
+                if (!menuByOrder.has(item.order_id)) menuByOrder.set(item.order_id, []);
+                const name = item.products?.name || 'Produk';
+                menuByOrder.get(item.order_id).push(`${escapeHtml(name)} × ${Number(item.qty || 0)}`);
+            });
+            let totalCash = 0, totalNonCash = 0, totalRevenue = 0;
+            tableBody.innerHTML = orders.map(order => {
+                const amount = Number(order.total || 0);
+                totalRevenue += amount;
+                if (order.payment_method === 'cash') totalCash += amount;
+                else if (order.payment_method === 'qris' || order.payment_method === 'debit') totalNonCash += amount;
+                const menus = menuByOrder.get(order.id) || [];
+                return `<tr><td>${new Date(order.created_at).toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta' })}</td><td><span class="badge badge-info">${escapeHtml(order.order_type || '-')}</span></td><td>${escapeHtml(order.customer_name || 'Walk-in')}</td><td>${menus.length ? menus.join(', ') : 'Tidak ada detail menu'}</td><td><span class="badge badge-${order.payment_method === 'cash' ? 'success' : order.payment_method === 'qris' ? 'info' : 'warning'}">${escapeHtml((order.payment_method || '-').toUpperCase())}</span></td><td><b>${formatRp(amount)}</b></td><td><span class="badge badge-${order.status === 'paid' ? 'success' : 'warning'}">${escapeHtml(order.status || '-')}</span></td><td class="order-action-btns"><button onclick="window.viewOrderDetail('${order.id}')" title="Lihat & Cetak"><i class="fas fa-eye"></i></button><button onclick="window.editOrder('${order.id}')" title="Edit"><i class="fas fa-edit"></i></button><button class="delete-btn" onclick="window.deleteOrder('${order.id}')" title="Hapus"><i class="fas fa-trash"></i></button></td></tr>`;
+            }).join('');
+            document.getElementById('ordersSummary').innerHTML = `<div class="stats-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px"><div class="stat-card"><div class="stat-info"><div class="stat-label">Total Order</div><div class="stat-value">${orders.length}</div></div></div><div class="stat-card"><div class="stat-info"><div class="stat-label">Cash</div><div class="stat-value">${formatRp(totalCash)}</div></div></div><div class="stat-card"><div class="stat-info"><div class="stat-label">Non-Tunai</div><div class="stat-value">${formatRp(totalNonCash)}</div></div></div><div class="stat-card"><div class="stat-info"><div class="stat-label">Total Penjualan</div><div class="stat-value">${formatRp(totalRevenue)}</div></div></div></div>`;
+        } catch (error) {
+            console.error(error);
+            tableBody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:#ef4444">Gagal memuat riwayat order. Silakan coba lagi.</td></tr>';
+            showToast('Gagal memuat riwayat order: ' + error.message, true);
+        }
+    }
     window.loadOrders = loadOrders; window.resetOrderFilter = function() { document.getElementById('orderFilterStart').value = ''; document.getElementById('orderFilterEnd').value = ''; loadOrders(); };
     window.viewOrderDetail = async function(orderId) { const { data: order } = await supabase.from('orders').select('*, app_users(full_name)').eq('id', orderId).single(); const { data: items } = await supabase.from('order_items').select('*, products(name)').eq('order_id', orderId); if (!order) { showToast('Order tidak ditemukan', true); return; } const sub = (items || []).reduce((s, i) => s + (i.unit_price * i.qty), 0); let html = `<div class="receipt-header"><h3>☕ MASUSPACE</h3><p>Coffee Shop</p><p style="font-size:10px;margin-top:8px">${new Date(order.created_at).toLocaleString('id-ID')}</p><p style="font-size:10px">${order.order_number}</p><p style="font-size:10px">Kasir: ${order.app_users?.full_name || '-'}</p><p style="font-size:10px">Customer: ${order.customer_name || 'Walk-in'}</p></div><div style="margin-bottom:10px">${(items || []).map(i => `<div class="receipt-item"><div>${i.products?.name || 'Product'} x${i.qty}</div><div>${formatRp(i.unit_price * i.qty)}</div></div>`).join('')}</div><div class="receipt-total"><div class="receipt-item"><span>Subtotal</span><span>${formatRp(sub)}</span></div>${order.discount_amount > 0 ? `<div class="receipt-item"><span>Diskon</span><span>-${formatRp(order.discount_amount)}</span></div>` : ''}<div class="receipt-item" style="font-size:14px"><span>TOTAL</span><span>${formatRp(order.total)}</span></div><div class="receipt-item"><span>Bayar (${(order.payment_method||'cash').toUpperCase()})</span><span>${formatRp(order.paid_amount)}</span></div>${order.payment_method === 'cash' ? `<div class="receipt-item"><span>Kembali</span><span>${formatRp(order.change_amount)}</span></div>` : ''}</div><div style="text-align:center;margin-top:12px;font-size:10px"><p>━━━━━━━━━━━━━━━━━━━</p><p>Terima kasih!</p></div>`; document.getElementById('orderDetailContent').innerHTML = html; document.getElementById('orderDetailModal').classList.add('active'); };
     window.printOrderDetail = function() { const content = document.getElementById('orderDetailContent').innerHTML; const w = window.open('', '', 'width=400,height=600'); w.document.write(`<html><head><title>Struk</title><style>body{font-family:'Courier New',monospace;font-size:12px;padding:20px;} .receipt-item{display:flex;justify-content:space-between;margin-bottom:4px;} .receipt-header{text-align:center;margin-bottom:12px;border-bottom:1px dashed #000;padding-bottom:12px;} .receipt-total{border-top:1px dashed #000;padding-top:8px;font-weight:bold;}</style></head><body>${content}</body></html>`); w.document.close(); w.print(); };
@@ -487,5 +551,9 @@
     window.closeModal = function(id) { document.getElementById(id).classList.remove('active'); };
     document.addEventListener('click', e => { if (e.target.classList.contains('modal-overlay')) e.target.classList.remove('active'); });
 
-    document.addEventListener('DOMContentLoaded', function() { loadUsersToDropdown(); const loginForm = document.getElementById('loginForm'); if (loginForm) { loginForm.addEventListener('submit', function(e) { e.preventDefault(); window.handleLogin(e); }); } });
+    document.addEventListener('DOMContentLoaded', function() {
+        loadUsersToDropdown();
+        ['dashboardStartDate', 'dashboardEndDate'].forEach(id => document.getElementById(id)?.addEventListener('change', window.applyDashboardFilter));
+        ['orderFilterStart', 'orderFilterEnd'].forEach(id => document.getElementById(id)?.addEventListener('change', () => loadOrders()));
+        const loginForm = document.getElementById('loginForm'); if (loginForm) { loginForm.addEventListener('submit', function(e) { e.preventDefault(); window.handleLogin(e); }); } });
 })();
