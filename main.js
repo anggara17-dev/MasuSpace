@@ -193,7 +193,7 @@
             const cashierExpenses = expenses.filter(expense => expense.cash_sources?.name === 'Cash Kasir').reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
             const cashierBalanceToday = cashSales - cashierExpenses;
             content.innerHTML =
-                '<div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:10px;margin-bottom:16px">' +
+                '<div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,360px),1fr));gap:10px;margin-bottom:16px">' +
                     '<div class="stat-card"><div class="stat-info"><div class="stat-label">TOTAL PENJUALAN</div><div class="stat-value" style="font-size:18px">' + formatRp(totalRevenue) + '</div></div></div>' +
                     '<div class="stat-card"><div class="stat-info"><div class="stat-label">PEMBAYARAN NON TUNAI</div><div class="stat-value" style="font-size:18px">' + formatRp(nonCashSales) + '</div></div></div>' +
                     '<div class="stat-card"><div class="stat-info"><div class="stat-label">TOTAL PENGELUARAN</div><div class="stat-value" style="font-size:18px;color:#ef4444">' + formatRp(totalExpenses) + '</div></div></div>' +
