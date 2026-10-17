@@ -550,7 +550,83 @@
     window.addCategory = async function() { const name = document.getElementById('newCategoryName').value.trim(); const icon = document.getElementById('newCategoryIcon').value.trim() || ''; if (!name) { showToast('Nama kategori wajib!', true); return; } const { error } = await supabase.from('categories').insert({ name, icon, is_active: true, display_order: 99 }); if (error) { showToast('Gagal: ' + error.message, true); return; } showToast('Kategori ditambahkan!'); state.categories = []; await loadKasirData(); window.showCategoryModal(); };
     window.deleteCategory = async function(id) { if (!confirm('Hapus kategori ini?')) return; const { error } = await supabase.from('categories').update({ is_active: false }).eq('id', id); if (error) { showToast('Gagal: ' + error.message, true); return; } showToast('Kategori dihapus!'); state.categories = []; await loadKasirData(); window.showCategoryModal(); };
 
+    const heldOrdersStorageKey = 'masuspace-held-orders';
+    function getHeldOrders() {
+        try { return JSON.parse(localStorage.getItem(heldOrdersStorageKey) || '[]'); }
+        catch (error) { console.error('Draft order rusak:', error); return []; }
+    }
+    function saveHeldOrders(orders) { localStorage.setItem(heldOrdersStorageKey, JSON.stringify(orders)); }
+    function renderHeldOrders() {
+        const container = document.getElementById('holdOrdersList');
+        if (!container) return;
+        const orders = getHeldOrders();
+        container.innerHTML = orders.length
+            ? orders.map(order => {
+                const items = (order.items || []).map(item => `${escapeHtml(item.name)} × ${Number(item.qty || 0)}`).join(', ');
+                const created = order.created_at ? new Date(order.created_at).toLocaleString('id-ID') : '';
+                return `<div class="held-order-item" style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px;border-bottom:1px solid var(--border)"><div style="min-width:0"><b>${escapeHtml(order.customer_name || 'Walk-in')}</b><div style="font-size:12px;color:var(--text-light);margin-top:4px">${items || 'Tanpa menu'} • ${created}</div></div><div style="display:flex;gap:8px;flex-shrink:0"><button class="btn-primary" onclick="window.restoreHeldOrder('${order.id}')">Lanjutkan</button><button class="btn-secondary" onclick="window.deleteHeldOrder('${order.id}')">Hapus</button></div></div>`;
+            }).join('')
+            : '<p style="text-align:center;color:var(--text-light);padding:20px">Belum ada draft order di perangkat ini</p>';
+    }
+    window.showHoldOrders = function() {
+        document.getElementById('holdOrdersModal').classList.add('active');
+        renderHeldOrders();
+    };
+    window.saveCurrentHeldOrder = function() {
+        if (!state.cart.length) { showToast('Tambahkan menu terlebih dahulu sebelum menyimpan draft.', true); return false; }
+        const orders = getHeldOrders();
+        orders.unshift({
+            id: window.crypto?.randomUUID?.() || `draft-${Date.now()}`,
+            created_at: new Date().toISOString(),
+            cashier: state.currentUser?.full_name || '',
+            customer_name: document.getElementById('customerName').value.trim() || 'Walk-in',
+            table_number: document.getElementById('tableNumber').value.trim(),
+            order_type: state.orderType,
+            discount: { ...state.discount },
+            items: state.cart
+        });
+        try { saveHeldOrders(orders); }
+        catch (error) { showToast('Draft tidak tersimpan. Periksa penyimpanan browser.', true); return false; }
+        state.cart = [];
+        state.discount = { type: 'percent', value: 0 };
+        document.getElementById('discountTypeInline').value = 'none';
+        document.getElementById('discountValueInline').value = '';
+        document.getElementById('customerName').value = '';
+        document.getElementById('tableNumber').value = '';
+        renderCart();
+        renderHeldOrders();
+        showToast('Order disimpan sebagai draft di perangkat ini.');
+        return true;
+    };
+    window.restoreHeldOrder = function(id) {
+        if (state.cart.length && !confirm('Order aktif akan diganti. Simpan dulu sebagai draft?')) return;
+        if (state.cart.length && !window.saveCurrentHeldOrder()) return;
+        const orders = getHeldOrders();
+        const index = orders.findIndex(order => order.id === id);
+        if (index < 0) { showToast('Draft order tidak ditemukan.', true); renderHeldOrders(); return; }
+        const [order] = orders.splice(index, 1);
+        try { saveHeldOrders(orders); }
+        catch (error) { showToast('Draft tidak dapat dipindahkan dari penyimpanan browser.', true); return; }
+        state.cart = Array.isArray(order.items) ? order.items : [];
+        state.discount = order.discount || { type: 'percent', value: 0 };
+        state.orderType = order.order_type || 'dine_in';
+        document.getElementById('discountTypeInline').value = state.discount.type === 'fixed' ? 'fixed' : state.discount.value ? 'percent' : 'none';
+        document.getElementById('discountValueInline').value = state.discount.value || '';
+        document.getElementById('customerName').value = order.customer_name === 'Walk-in' ? '' : order.customer_name || '';
+        document.getElementById('tableNumber').value = order.table_number || '';
+        document.querySelectorAll('.type-btn').forEach(button => button.classList.toggle('active', button.textContent.toLowerCase().includes(state.orderType === 'dine_in' ? 'dine' : 'take')));
+        renderCart();
+        window.closeModal('holdOrdersModal');
+        showToast('Draft order dilanjutkan.');
+    };
+    window.deleteHeldOrder = function(id) {
+        if (!confirm('Hapus draft order ini?')) return;
+        try { saveHeldOrders(getHeldOrders().filter(order => order.id !== id)); }
+        catch (error) { showToast('Draft tidak dapat dihapus dari penyimpanan browser.', true); return; }
+        renderHeldOrders();
+    };
     window.closeModal = function(id) { document.getElementById(id).classList.remove('active'); };
+    window.closeConfirmModal = function() { window.closeModal('confirmModal'); };
     document.addEventListener('click', e => { if (e.target.classList.contains('modal-overlay')) e.target.classList.remove('active'); });
 
     document.addEventListener('DOMContentLoaded', function() {
