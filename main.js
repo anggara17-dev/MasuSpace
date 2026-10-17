@@ -708,5 +708,6 @@
             clearTimeout(orderFilterTimer);
             orderFilterTimer = setTimeout(loadOrders, 180);
         }));
+        ['reportStartDate', 'reportEndDate'].forEach(id => document.getElementById(id)?.addEventListener('change', window.applyReportFilter));
         const loginForm = document.getElementById('loginForm'); if (loginForm) { loginForm.addEventListener('submit', function(e) { e.preventDefault(); window.handleLogin(e); }); } });
 })();
