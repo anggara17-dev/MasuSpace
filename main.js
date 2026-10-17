@@ -89,16 +89,14 @@
         const rangeStart = startDate + 'T00:00:00+07:00';
         const rangeEndExclusive = new Date(new Date(endDate + 'T00:00:00+07:00').getTime() + 24 * 60 * 60 * 1000).toISOString();
         try {
-            const [ordersResult, expensesResult, cashMutationsResult, inventoryResult] = await Promise.all([
+            const [ordersResult, expensesResult, inventoryResult] = await Promise.all([
                 supabase.from('orders').select('id,total,payment_method').gte('created_at', rangeStart).lt('created_at', rangeEndExclusive).in('status', ['paid', 'completed']),
                 supabase.from('expenses').select('amount,cash_sources(name)').gte('created_at', rangeStart).lt('created_at', rangeEndExclusive),
-                supabase.rpc('get_inventory_summary'),
-                supabase.rpc('get_cash_sources')
+                supabase.rpc('get_inventory_summary')
             ]);
             if (requestId !== dashboardRequestId) return;
             if (ordersResult.error) throw ordersResult.error;
             if (expensesResult.error) throw expensesResult.error;
-            if (cashMutationsResult.error) throw cashMutationsResult.error;
             if (inventoryResult.error) throw inventoryResult.error;
             const orders = ordersResult.data || [];
             const expenses = expensesResult.data || [];
