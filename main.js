@@ -71,19 +71,56 @@
 
     async function loadDashboard() {
         const today = getTodayJakarta();
+        const startInput = document.getElementById('dashboardStartDate');
+        const endInput = document.getElementById('dashboardEndDate');
+        if (startInput && !startInput.value) startInput.value = today;
+        if (endInput && !endInput.value) endInput.value = today;
+        const startDate = startInput?.value || today;
+        const endDate = endInput?.value || today;
+        if (startDate > endDate) { showToast('Tanggal awal tidak boleh melewati tanggal akhir.', true); return; }
+        const rangeStart = startDate + 'T00:00:00+07:00';
+        const rangeEndExclusive = new Date(new Date(endDate + 'T00:00:00+07:00').getTime() + 24 * 60 * 60 * 1000).toISOString();
         try {
-            const { data: todayOrders } = await supabase.from('orders').select('*').gte('created_at', today + 'T00:00:00+07:00').lte('created_at', today + 'T23:59:59+07:00').eq('status', 'paid');
-            const { data: todayExpenses } = await supabase.from('expenses').select('amount').gte('created_at', today + 'T00:00:00+07:00');
-            const { data: cashData } = await supabase.rpc('get_cash_sources'); const { data: invData } = await supabase.rpc('get_inventory_summary');
-            const totalOrders = (todayOrders || []).length; const totalRevenue = (todayOrders || []).reduce((s, o) => s + parseFloat(o.total), 0); const totalExpense = (todayExpenses || []).reduce((s, e) => s + parseFloat(e.amount), 0); const netProfit = totalRevenue - totalExpense;
-            const cashSales = (todayOrders || []).filter(o => o.payment_method === 'cash').reduce((s, o) => s + parseFloat(o.total), 0); const qrisSales = (todayOrders || []).filter(o => o.payment_method === 'qris').reduce((s, o) => s + parseFloat(o.total), 0); const debitSales = (todayOrders || []).filter(o => o.payment_method === 'debit').reduce((s, o) => s + parseFloat(o.total), 0);
-            document.getElementById('statOrders').innerText = totalOrders; document.getElementById('statRevenue').innerText = formatRp(totalRevenue); document.getElementById('statExpense').innerText = formatRp(totalExpense); document.getElementById('statProfit').innerText = formatRp(netProfit); document.getElementById('statProfit').style.color = netProfit >= 0 ? 'var(--primary-dark)' : '#ef4444';
-            const laci = (cashData || []).find(c => c.name === 'Cash Kasir'); document.getElementById('statCash').innerText = formatRp(laci?.current_balance || 0); document.getElementById('statLowStock').innerText = ((invData?.low_stock || 0) + (invData?.out_of_stock || 0));
+            const [ordersResult, expensesResult, cashResult, inventoryResult] = await Promise.all([
+                supabase.from('orders').select('*').gte('created_at', rangeStart).lt('created_at', rangeEndExclusive).eq('status', 'paid'),
+                supabase.from('expenses').select('amount').gte('created_at', rangeStart).lt('created_at', rangeEndExclusive),
+                supabase.rpc('get_cash_sources'),
+                supabase.rpc('get_inventory_summary')
+            ]);
+            if (ordersResult.error) throw ordersResult.error;
+            if (expensesResult.error) throw expensesResult.error;
+            if (cashResult.error) throw cashResult.error;
+            if (inventoryResult.error) throw inventoryResult.error;
+            const orders = ordersResult.data || [];
+            const expenses = expensesResult.data || [];
+            const totalOrders = orders.length;
+            const totalRevenue = orders.reduce((sum, order) => sum + Number(order.total || 0), 0);
+            const totalExpense = expenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
+            const netProfit = totalRevenue - totalExpense;
+            const cashSales = orders.filter(order => order.payment_method === 'cash').reduce((sum, order) => sum + Number(order.total || 0), 0);
+            const qrisSales = orders.filter(order => order.payment_method === 'qris').reduce((sum, order) => sum + Number(order.total || 0), 0);
+            const debitSales = orders.filter(order => order.payment_method === 'debit').reduce((sum, order) => sum + Number(order.total || 0), 0);
+            document.getElementById('statOrders').innerText = totalOrders;
+            document.getElementById('statRevenue').innerText = formatRp(totalRevenue);
+            document.getElementById('statExpense').innerText = formatRp(totalExpense);
+            document.getElementById('statProfit').innerText = formatRp(netProfit);
+            document.getElementById('statProfit').style.color = netProfit >= 0 ? 'var(--primary-dark)' : '#ef4444';
+            const laci = (cashResult.data || []).find(source => source.name === 'Cash Kasir');
+            document.getElementById('statCash').innerText = formatRp(laci?.current_balance || 0);
+            document.getElementById('statLowStock').innerText = ((inventoryResult.data?.low_stock || 0) + (inventoryResult.data?.out_of_stock || 0));
+            const paymentTitle = document.getElementById('dashboardPaymentTitle');
+            if (paymentTitle) paymentTitle.innerText = startDate === today && endDate === today ? 'Pembayaran Hari Ini' : 'Pembayaran Periode';
             document.getElementById('dashPaymentMethods').innerHTML = `<div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)"><span><i class="fas fa-money-bill-wave" style="color:var(--primary);margin-right:8px"></i>Cash</span><b>${formatRp(cashSales)}</b></div><div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)"><span><i class="fas fa-qrcode" style="color:var(--primary);margin-right:8px"></i>QRIS</span><b>${formatRp(qrisSales)}</b></div><div style="display:flex;justify-content:space-between;padding:10px 0"><span><i class="fas fa-credit-card" style="color:var(--primary);margin-right:8px"></i>Debit</span><b>${formatRp(debitSales)}</b></div>`;
             document.getElementById('dashTopProducts').innerHTML = '<p style="color:var(--text-light);text-align:center;padding:20px">Fitur top products akan ditampilkan di sini</p>';
-        } catch (e) { console.error(e); }
+        } catch (error) { console.error(error); showToast('Gagal memuat dashboard: ' + error.message, true); }
     }
-
+    window.applyDashboardFilter = function() { loadDashboard(); };
+    window.resetDashboardFilter = function() {
+        const today = getTodayJakarta();
+        document.getElementById('dashboardStartDate').value = today;
+        document.getElementById('dashboardEndDate').value = today;
+        loadDashboard();
+    };
     async function loadKasirData() {
         if (state.categories.length === 0) { const { data: cats } = await supabase.from('categories').select('*').eq('is_active', true).order('display_order'); state.categories = cats || []; const { data: prods } = await supabase.from('products').select('*').eq('is_active', true).order('display_order'); state.products = prods || []; const { data: vars } = await supabase.from('product_variants').select('*').eq('is_active', true); state.variants = vars || []; const { data: adds } = await supabase.from('addons').select('*').eq('is_active', true).order('display_order'); state.addons = adds || []; }
         renderCategories(); renderProducts(); await loadQuickExpenseSources(); await loadKasirExpenses();
@@ -151,14 +188,16 @@
             const totalExpenses = expenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
             const qrisSales = orders.filter(order => order.payment_method === 'qris').reduce((sum, order) => sum + Number(order.total || 0), 0);
             const debitSales = orders.filter(order => order.payment_method === 'debit').reduce((sum, order) => sum + Number(order.total || 0), 0);
-            const cashSales = totalRevenue - qrisSales - debitSales;
+            const nonCashSales = qrisSales + debitSales;
+            const cashSales = totalRevenue - nonCashSales;
             const cashierExpenses = expenses.filter(expense => expense.cash_sources?.name === 'Cash Kasir').reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
             const cashierBalanceToday = cashSales - cashierExpenses;
             content.innerHTML =
-                '<div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-bottom:16px">' +
+                '<div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:10px;margin-bottom:16px">' +
                     '<div class="stat-card"><div class="stat-info"><div class="stat-label">TOTAL PENJUALAN</div><div class="stat-value" style="font-size:18px">' + formatRp(totalRevenue) + '</div></div></div>' +
-                    '<div class="stat-card"><div class="stat-info"><div class="stat-label">CASH KASIR</div><div class="stat-value" style="font-size:16px;color:' + (cashierBalanceToday >= 0 ? 'var(--primary)' : '#ef4444') + '">' + formatRp(cashierBalanceToday) + '</div></div></div>' +
-                    '<div class="stat-card"><div class="stat-info"><div class="stat-label">TOTAL PENGELUARAN</div><div class="stat-value" style="font-size:16px;color:#ef4444">' + formatRp(totalExpenses) + '</div></div></div>' +
+                    '<div class="stat-card"><div class="stat-info"><div class="stat-label">PEMBAYARAN NON TUNAI</div><div class="stat-value" style="font-size:18px">' + formatRp(nonCashSales) + '</div></div></div>' +
+                    '<div class="stat-card"><div class="stat-info"><div class="stat-label">TOTAL PENGELUARAN</div><div class="stat-value" style="font-size:18px;color:#ef4444">' + formatRp(totalExpenses) + '</div></div></div>' +
+                    '<div class="stat-card"><div class="stat-info"><div class="stat-label">CASH KASIR</div><div class="stat-value" style="font-size:18px;color:' + (cashierBalanceToday >= 0 ? 'var(--primary)' : '#ef4444') + '">' + formatRp(cashierBalanceToday) + '</div></div></div>' +
                 '</div>' +
                 '<h4 style="margin:16px 0 10px">Pembayaran</h4>' +
                 '<div style="background:var(--bg);padding:12px;border-radius:8px">' +
@@ -170,12 +209,8 @@
                 '<div style="max-height:200px;overflow-y:auto">' +
                     (orders.map(order => '<div style="display:flex;justify-content:space-between;padding:8px;border-bottom:1px solid var(--border);font-size:12px"><span><b>' + order.order_number + '</b> - ' + (order.customer_name || 'Walk-in') + '</span><b>' + formatRp(order.total) + '</b></div>').join('') || '<p style="color:var(--text-light);text-align:center;padding:20px">Belum ada order</p>') +
                 '</div>';
-        } catch (error) {
-            content.innerHTML = '<p style="color:#ef4444;text-align:center">Gagal memuat: ' + error.message + '</p>';
-        }
+        } catch (error) { content.innerHTML = '<p style="color:#ef4444;text-align:center">Gagal memuat: ' + error.message + '</p>'; }
     };
-
-
      async function loadOrders() { const start = document.getElementById('orderFilterStart')?.value; const end = document.getElementById('orderFilterEnd')?.value; let query = supabase.from('orders').select('*, app_users(full_name)').order('created_at', { ascending: false }).limit(100); if (start) query = query.gte('created_at', start + 'T00:00:00+07:00'); if (end) query = query.lte('created_at', end + 'T23:59:59+07:00'); const { data } = await query; const orders = data || []; const tbody = document.getElementById('ordersTableBody'); if (orders.length === 0) { tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:30px;color:var(--text-light)">Tidak ada data</td></tr>'; document.getElementById('ordersSummary').innerHTML = ''; return; } let totalRev = 0, totalCash = 0, totalNonCash = 0; tbody.innerHTML = orders.map(o => { totalRev += parseFloat(o.total); if (o.payment_method === 'cash') totalCash += parseFloat(o.total); else totalNonCash += parseFloat(o.total); return `<tr><td><b>${o.order_number}</b></td><td>${new Date(o.created_at).toLocaleDateString('id-ID')}</td><td><span class="badge badge-info">${o.order_type}</span></td><td>${o.customer_name || '-'}</td><td>${o.app_users?.full_name || '-'}</td><td><span class="badge badge-${o.payment_method==='cash'?'success':o.payment_method==='qris'?'info':'warning'}">${(o.payment_method||'-').toUpperCase()}</span></td><td><b>${formatRp(o.total)}</b></td><td><span class="badge badge-${o.status==='paid'?'success':'warning'}">${o.status}</span></td><td class="order-action-btns"><button onclick="window.viewOrderDetail('${o.id}')" title="Lihat & Cetak"><i class="fas fa-eye"></i></button><button onclick="window.editOrder('${o.id}')" title="Edit"><i class="fas fa-edit"></i></button><button class="delete-btn" onclick="window.deleteOrder('${o.id}')" title="Hapus"><i class="fas fa-trash"></i></button></td></tr>`; }).join(''); document.getElementById('ordersSummary').innerHTML = `<div class="stats-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px"><div class="stat-card"><div class="stat-info"><div class="stat-label">Total Order</div><div class="stat-value">${orders.length}</div></div></div><div class="stat-card"><div class="stat-info"><div class="stat-label">Cash</div><div class="stat-value">${formatRp(totalCash)}</div></div></div><div class="stat-card"><div class="stat-info"><div class="stat-label">Non-Tunai</div><div class="stat-value">${formatRp(totalNonCash)}</div></div></div></div>`; }
     window.loadOrders = loadOrders; window.resetOrderFilter = function() { document.getElementById('orderFilterStart').value = ''; document.getElementById('orderFilterEnd').value = ''; loadOrders(); };
     window.viewOrderDetail = async function(orderId) { const { data: order } = await supabase.from('orders').select('*, app_users(full_name)').eq('id', orderId).single(); const { data: items } = await supabase.from('order_items').select('*, products(name)').eq('order_id', orderId); if (!order) { showToast('Order tidak ditemukan', true); return; } const sub = (items || []).reduce((s, i) => s + (i.unit_price * i.qty), 0); let html = `<div class="receipt-header"><h3>☕ MASUSPACE</h3><p>Coffee Shop</p><p style="font-size:10px;margin-top:8px">${new Date(order.created_at).toLocaleString('id-ID')}</p><p style="font-size:10px">${order.order_number}</p><p style="font-size:10px">Kasir: ${order.app_users?.full_name || '-'}</p><p style="font-size:10px">Customer: ${order.customer_name || 'Walk-in'}</p></div><div style="margin-bottom:10px">${(items || []).map(i => `<div class="receipt-item"><div>${i.products?.name || 'Product'} x${i.qty}</div><div>${formatRp(i.unit_price * i.qty)}</div></div>`).join('')}</div><div class="receipt-total"><div class="receipt-item"><span>Subtotal</span><span>${formatRp(sub)}</span></div>${order.discount_amount > 0 ? `<div class="receipt-item"><span>Diskon</span><span>-${formatRp(order.discount_amount)}</span></div>` : ''}<div class="receipt-item" style="font-size:14px"><span>TOTAL</span><span>${formatRp(order.total)}</span></div><div class="receipt-item"><span>Bayar (${(order.payment_method||'cash').toUpperCase()})</span><span>${formatRp(order.paid_amount)}</span></div>${order.payment_method === 'cash' ? `<div class="receipt-item"><span>Kembali</span><span>${formatRp(order.change_amount)}</span></div>` : ''}</div><div style="text-align:center;margin-top:12px;font-size:10px"><p>━━━━━━━━━━━━━━━━━━━</p><p>Terima kasih!</p></div>`; document.getElementById('orderDetailContent').innerHTML = html; document.getElementById('orderDetailModal').classList.add('active'); };
