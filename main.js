@@ -52,7 +52,9 @@
     window.closeUserMenu = function() { document.getElementById('userDropdown').classList.remove('show'); };
     document.addEventListener('click', function(e) { const userMenu = document.querySelector('.user-menu'); if (userMenu && !userMenu.contains(e.target)) window.closeUserMenu(); });
 
+    const removedPages = new Set(['products', 'inventory', 'accounting', 'investors']);
     window.navigate = async function(page) {
+        if (removedPages.has(page)) return false;
         state.currentPage = page;
         document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
         const pageEl = document.getElementById(`page-${page}`); if (pageEl) pageEl.classList.add('active');
