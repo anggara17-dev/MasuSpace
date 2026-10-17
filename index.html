@@ -79,6 +79,14 @@
 
             <div class="pages-container">
                 <div id="page-dashboard" class="page active">
+                    <div style="display:flex;align-items:end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px;padding:14px 16px;background:var(--card-bg);border:1px solid var(--border);border-radius:12px">
+                        <div style="display:flex;align-items:end;gap:10px;flex-wrap:wrap">
+                            <label style="display:grid;gap:5px;font-size:12px;color:var(--text-light);font-weight:600">Dari tanggal<input type="date" id="dashboardStartDate" style="padding:9px 11px;border:1px solid var(--border);border-radius:8px;color:var(--text);background:var(--card-bg)"></label>
+                            <label style="display:grid;gap:5px;font-size:12px;color:var(--text-light);font-weight:600">Sampai tanggal<input type="date" id="dashboardEndDate" style="padding:9px 11px;border:1px solid var(--border);border-radius:8px;color:var(--text);background:var(--card-bg)"></label>
+                            <button class="btn btn-primary" onclick="window.applyDashboardFilter()"><i class="fas fa-filter"></i> Filter</button>
+                            <button class="btn btn-secondary" onclick="window.resetDashboardFilter()">Hari Ini</button>
+                        </div>
+                    </div>
                     <div class="stats-grid compact">
                         <div class="stat-card"><div class="stat-icon"><i class="fas fa-shopping-bag"></i></div><div class="stat-info"><div class="stat-label">Order Hari Ini</div><div class="stat-value" id="statOrders">0</div></div></div>
                         <div class="stat-card"><div class="stat-icon"><i class="fas fa-money-bill-wave"></i></div><div class="stat-info"><div class="stat-label">Pendapatan</div><div class="stat-value" id="statRevenue">Rp 0</div></div></div>
@@ -88,7 +96,7 @@
                         <div class="stat-card"><div class="stat-icon"><i class="fas fa-box"></i></div><div class="stat-info"><div class="stat-label">Stok Menipis</div><div class="stat-value" id="statLowStock">0</div></div></div>
                     </div>
                     <div class="dashboard-grid">
-                        <div class="dash-card"><h3><i class="fas fa-chart-pie"></i> Pembayaran Hari Ini</h3><div id="dashPaymentMethods"></div></div>
+                        <div class="dash-card"><h3><i class="fas fa-chart-pie"></i> <span id="dashboardPaymentTitle">Pembayaran Hari Ini</span></h3><div id="dashPaymentMethods"></div></div>
                         <div class="dash-card"><h3><i class="fas fa-trophy"></i> Produk Terlaris</h3><div id="dashTopProducts"></div></div>
                     </div>
                 </div>
