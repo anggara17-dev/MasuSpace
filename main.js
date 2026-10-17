@@ -9,6 +9,8 @@
     let dashboardFilterTimer;
     let orderRequestId = 0;
     let orderFilterTimer;
+    let reportFilterTimer;
+    let reportRequestId = 0;
 
     function formatRp(num) { return 'Rp ' + Math.round(num || 0).toLocaleString('id-ID'); }
     function escapeHtml(value) { return String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char])); }
@@ -550,10 +552,59 @@
     window.setProfitPeriod = function() { const period = document.getElementById('psPeriod').value; const today = getTodayJakarta(); if (period === 'month') { const start = getJakartaMonthStart(); document.getElementById('psStart').value = start; document.getElementById('psEnd').value = today; } else if (period === 'quarter') { const start = getJakartaQuarterStart(); document.getElementById('psStart').value = start; document.getElementById('psEnd').value = today; } };
     window.calculateProfitSharing = async function() { const start = document.getElementById('psStart').value; const end = document.getElementById('psEnd').value; if (!start || !end) { showToast('Pilih tanggal!', true); return; } const { data, error } = await supabase.rpc('calculate_profit_sharing', { p_start: start, p_end: end }); if (error) { showToast('Gagal: ' + error.message, true); return; } document.getElementById('profitResult').innerHTML = `<h4>Hasil Perhitungan (${start} s/d ${end})</h4><div class="profit-row"><span>Laba Bersih</span><b style="color:var(--primary)">${formatRp(data.net_profit)}</b></div><div class="profit-row"><span>Investor (70%)</span><b>${formatRp(data.investor_share)}</b></div><div class="profit-row total"><span>Pengelola (30%)</span><b>${formatRp(data.manager_share)}</b></div><p style="margin-top:12px;font-size:12px;color:var(--text-light)">✅ Data tersimpan di tabel profit_sharing</p>`; await loadInvestors(); };
 
-    async function loadReports() { const today = getTodayJakarta(); const firstDay = getJakartaMonthStart(); document.getElementById('reportStartDate').value = firstDay; document.getElementById('reportEndDate').value = today; await window.loadSalesReport(); }
+    async function loadReports() {
+        const today = getTodayJakarta();
+        document.getElementById('reportStartDate').value = getJakartaMonthStart();
+        document.getElementById('reportEndDate').value = today;
+        await window.loadSalesReport();
+    }
     window.loadReports = loadReports;
-    window.setReportPreset = function(preset) { const today = getTodayJakarta(); let start = today; if (preset === 'today') start = today; else if (preset === 'week') start = getJakartaDateDaysAgo(7); else if (preset === 'month') start = getJakartaMonthStart(); document.getElementById('reportStartDate').value = start; document.getElementById('reportEndDate').value = today; window.loadSalesReport(); };
-    window.loadSalesReport = async function() { const start = document.getElementById('reportStartDate').value; const end = document.getElementById('reportEndDate').value; if (!start || !end) return; const { data: orders } = await supabase.from('orders').select('*').gte('created_at', start + 'T00:00:00+07:00').lte('created_at', end + 'T23:59:59+07:00').in('status', ['paid', 'completed']); const report = orders || []; let totalRev = 0, totalCash = 0, totalQris = 0, totalDebit = 0, totalOrd = 0; report.forEach(r => { totalRev += parseFloat(r.total); if (r.payment_method === 'cash') totalCash += parseFloat(r.total); else if (r.payment_method === 'qris') totalQris += parseFloat(r.total); else totalDebit += parseFloat(r.total); totalOrd++; }); document.getElementById('reportStats').innerHTML = `<div class="stat-card"><div class="stat-info"><div class="stat-label">Total Order</div><div class="stat-value">${totalOrd}</div></div></div><div class="stat-card"><div class="stat-info"><div class="stat-label">Pendapatan</div><div class="stat-value">${formatRp(totalRev)}</div></div></div><div class="stat-card"><div class="stat-info"><div class="stat-label">Cash</div><div class="stat-value">${formatRp(totalCash)}</div></div></div><div class="stat-card"><div class="stat-info"><div class="stat-label">Non-Tunai</div><div class="stat-value">${formatRp(totalQris + totalDebit)}</div></div></div>`; document.getElementById('reportTableBody').innerHTML = report.length ? report.map(r => `<tr><td>${new Date(r.created_at).toLocaleDateString('id-ID')}</td><td>1</td><td>${r.payment_method==='cash'?formatRp(r.total):'Rp 0'}</td><td>${r.payment_method==='qris'?formatRp(r.total):'Rp 0'}</td><td>${r.payment_method==='debit'?formatRp(r.total):'Rp 0'}</td><td><b>${formatRp(r.total)}</b></td></tr>`).join('') : '<tr><td colspan="6" style="text-align:center;padding:30px">Tidak ada data</td></tr>'; };
+    window.setReportPreset = function(preset) {
+        clearTimeout(reportFilterTimer);
+        const today = getTodayJakarta();
+        const start = preset === 'week' ? getJakartaDateDaysAgo(7) : preset === 'month' ? getJakartaMonthStart() : today;
+        document.getElementById('reportStartDate').value = start;
+        document.getElementById('reportEndDate').value = today;
+        window.loadSalesReport();
+    };
+    window.applyReportFilter = function() {
+        clearTimeout(reportFilterTimer);
+        reportFilterTimer = setTimeout(window.loadSalesReport, 180);
+    };
+    window.loadSalesReport = async function() {
+        const requestId = ++reportRequestId;
+        const start = document.getElementById('reportStartDate').value;
+        const end = document.getElementById('reportEndDate').value;
+        if (!start || !end) return;
+        if (start > end) {
+            showToast('Tanggal awal tidak boleh melewati tanggal akhir.', true);
+            return;
+        }
+        const rangeEndExclusive = new Date(new Date(end + 'T00:00:00+07:00').getTime() + 24 * 60 * 60 * 1000).toISOString();
+        const { data: orders, error } = await supabase.from('orders').select('*')
+            .gte('created_at', start + 'T00:00:00+07:00')
+            .lt('created_at', rangeEndExclusive)
+            .in('status', ['paid', 'completed']);
+        if (requestId !== reportRequestId) return;
+        if (error) {
+            console.error(error);
+            showToast('Gagal memuat laporan: ' + error.message, true);
+            return;
+        }
+        const report = orders || [];
+        let totalRev = 0, totalCash = 0, totalQris = 0, totalDebit = 0;
+        report.forEach(order => {
+            const total = Number(order.total || 0);
+            totalRev += total;
+            if (order.payment_method === 'cash') totalCash += total;
+            else if (order.payment_method === 'qris') totalQris += total;
+            else if (order.payment_method === 'debit') totalDebit += total;
+        });
+        document.getElementById('reportStats').innerHTML = `<div class="stat-card"><div class="stat-info"><div class="stat-label">Total Order</div><div class="stat-value">${report.length}</div></div></div><div class="stat-card"><div class="stat-info"><div class="stat-label">Pendapatan</div><div class="stat-value">${formatRp(totalRev)}</div></div></div><div class="stat-card"><div class="stat-info"><div class="stat-label">Cash</div><div class="stat-value">${formatRp(totalCash)}</div></div></div><div class="stat-card"><div class="stat-info"><div class="stat-label">Non-Tunai</div><div class="stat-value">${formatRp(totalQris + totalDebit)}</div></div></div>`;
+        document.getElementById('reportTableBody').innerHTML = report.length
+            ? report.map(order => `<tr><td>${new Date(order.created_at).toLocaleDateString('id-ID')}</td><td>1</td><td>${order.payment_method === 'cash' ? formatRp(order.total) : 'Rp 0'}</td><td>${order.payment_method === 'qris' ? formatRp(order.total) : 'Rp 0'}</td><td>${order.payment_method === 'debit' ? formatRp(order.total) : 'Rp 0'}</td><td><b>${formatRp(order.total)}</b></td></tr>`).join('')
+            : '<tr><td colspan="6" style="text-align:center;padding:30px">Tidak ada data</td></tr>';
+    };
 
     async function loadSettings() { const tab = document.querySelector('#page-settings .tab.active')?.textContent.trim() || 'Profil'; const content = document.getElementById('settingsContent'); if (tab.includes('Profil')) { const user = state.currentUser; content.innerHTML = `<div class="profile-section"><h3 style="margin-bottom:16px"><i class="fas fa-user-circle" style="color:var(--primary);margin-right:8px"></i>Profil Saya</h3><div class="profile-photo-section"><div class="profile-photo-preview" id="profilePhotoPreview" onclick="window.openPhotoUpload()">${user?.avatar_url && user.avatar_url.startsWith('http') ? `<img src="${user.avatar_url}" alt="Profile">` : '<i class="fas fa-user"></i>'}</div><div style="flex:1"><p style="font-size:13px;color:var(--text-light);margin-bottom:8px">Klik foto untuk upload dari komputer</p><button class="btn-secondary" onclick="window.openPhotoUpload()"><i class="fas fa-camera"></i> Upload Foto</button></div></div><div class="input-group"><label>Nama Lengkap</label><input type="text" id="profileFullName" value="${user?.full_name || ''}"></div><div class="input-group"><label>Password Baru</label><input type="password" id="profilePassword" placeholder="Kosongkan jika tidak diubah"></div><button class="btn-primary" onclick="window.saveProfile()"><i class="fas fa-save"></i> Simpan Profil</button></div>`; } else if (tab.includes('User')) { const { data: users } = await supabase.from('app_users').select('*').eq('is_active', true).order('full_name'); const userList = users || []; content.innerHTML = `<div class="profile-section"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><h3><i class="fas fa-users" style="color:var(--primary);margin-right:8px"></i>Manajemen User</h3><button class="btn-primary" onclick="window.showUserForm()"><i class="fas fa-plus"></i> Tambah User</button></div><div class="user-list">${userList.map(u => `<div class="user-list-item"><div class="user-list-info"><div class="user-avatar">${u.full_name.charAt(0).toUpperCase()}</div><div><div class="user-name">${u.full_name}</div><div class="user-role">@${u.username} • ${u.role}</div></div></div><div class="user-list-actions"><button class="btn-secondary" style="padding:6px 10px;font-size:11px" onclick="window.editUser('${u.id}')"><i class="fas fa-edit"></i></button><button class="btn-secondary" style="padding:6px 10px;font-size:11px;color:#ef4444" onclick="window.deleteUser('${u.id}')"><i class="fas fa-trash"></i></button></div></div>`).join('')}</div></div>`; } else if (tab.includes('Info Toko')) { const { data } = await supabase.from('settings').select('*'); const settings = {}; (data || []).forEach(s => settings[s.key] = s.value); const store = settings.store_info || {}; content.innerHTML = `<div class="settings-grid"><div class="settings-card"><h3><i class="fas fa-store"></i> Info Toko</h3><div class="input-group"><label>Nama Toko</label><input type="text" id="settingStoreName" value="${store.name || 'MasuSpace Coffee'}"></div><div class="input-group"><label>Alamat</label><input type="text" id="settingAddress" value="${store.address || ''}"></div><div class="input-group"><label>Telepon</label><input type="text" id="settingPhone" value="${store.phone || ''}"></div><div class="input-group"><label>Email</label><input type="email" id="settingEmail" value="${store.email || ''}"></div><button class="btn-primary" onclick="window.saveSettings()"><i class="fas fa-save"></i> Simpan</button></div></div>`; } else if (tab.includes('Pajak')) { const { data } = await supabase.from('settings').select('*'); const settings = {}; (data || []).forEach(s => settings[s.key] = s.value); const tax = settings.tax || {}; content.innerHTML = `<div class="settings-grid"><div class="settings-card"><h3><i class="fas fa-percent"></i> Pajak</h3><div class="input-group"><label>Aktifkan Pajak</label><select id="settingTaxEnabled"><option value="true" ${tax.enabled?'selected':''}>Ya</option><option value="false" ${!tax.enabled?'selected':''}>Tidak</option></select></div><div class="input-group"><label>Rate (%)</label><input type="number" id="settingTaxRate" value="${tax.rate || 0}"></div><button class="btn-primary" onclick="window.saveSettings()"><i class="fas fa-save"></i> Simpan</button></div></div>`; } }
     window.loadSettings = loadSettings; window.switchSettingsTab = function(tab, btn) { document.querySelectorAll('#page-settings .tab').forEach(t => t.classList.remove('active')); btn.classList.add('active'); loadSettings(); };
