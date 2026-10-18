@@ -31,11 +31,12 @@
             <div class="login-form-container">
                 <div class="login-form-header"><h2>Masuk</h2><p>Gunakan akun terdaftar</p></div>
                 <form class="login-form" id="loginForm">
-                    <div class="form-group"><label>Username</label><div class="select-wrapper"><i class="fas fa-user"></i><select id="loginUsername" required><option value="">— pilih user —</option></select><i class="fas fa-chevron-down select-arrow"></i></div></div>
-                    <div class="form-group"><label>Password</label><div class="password-wrapper"><input type="password" id="loginPassword" placeholder="Password" required><button type="button" class="password-toggle" onclick="window.togglePassword()"><i class="fas fa-eye" id="passwordIcon"></i></button></div></div>
+                    <div class="form-group"><label>Pengguna</label><div class="select-wrapper"><i class="fas fa-user"></i><select id="loginUsername" required><option value="">— pilih user —</option></select><i class="fas fa-chevron-down select-arrow"></i></div></div>
+                    <div class="form-group" id="loginEmailGroup" style="display:none"><label>Email akun Owner</label><input type="email" id="loginEmail" placeholder="Email Supabase Auth" autocomplete="username"></div>
+                    <div class="form-group"><label>Password</label><div class="password-wrapper"><input type="password" id="loginPassword" placeholder="Password" autocomplete="current-password" required><button type="button" class="password-toggle" onclick="window.togglePassword()"><i class="fas fa-eye" id="passwordIcon"></i></button></div></div>
                     <button type="submit" class="login-submit-btn" id="loginBtn"><i class="fas fa-arrow-right-to-bracket"></i><span>Masuk</span></button>
                 </form>
-                <div class="login-hint-box"><p><strong>Demo:</strong> Password: <code>1234</code></p><div class="demo-accounts"><div class="demo-row"><span class="demo-label">Owner:</span><code>owner</code></div><div class="demo-row"><span class="demo-label">Kasir:</span><code>kasir1</code></div></div></div>
+                <div class="login-hint-box"><p>Pilih Owner untuk masuk dengan akun Supabase Auth. Kasir menggunakan akun kasir terdaftar.</p></div>
                 <div class="login-footer-right">MasuSpace Team</div>
             </div>
         </div>
