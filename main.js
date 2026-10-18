@@ -4,7 +4,7 @@
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     document.addEventListener('submit', function(e) { e.preventDefault(); return false; });
 
-    let state = { currentUser: null, currentPage: 'dashboard', cart: [], categories: [], products: [], variants: [], addons: [], modalProduct: null, modalVariant: { suhu: 'Hot', ukuran: 'Regular' }, modalAddons: [], modalQty: 1, paymentMethod: 'cash', cashReceived: 0, discount: { type: 'percent', value: 0 }, orderType: 'dine_in', currentReceipt: null, kasirExpenses: [], ingredients: [], pendingPhotoBase64: null };
+    let state = { currentUser: null, authUserId: null, currentPage: 'dashboard', cart: [], categories: [], products: [], variants: [], addons: [], modalProduct: null, modalVariant: { suhu: 'Hot', ukuran: 'Regular' }, modalAddons: [], modalQty: 1, paymentMethod: 'cash', cashReceived: 0, discount: { type: 'percent', value: 0 }, orderType: 'dine_in', currentReceipt: null, kasirExpenses: [], ingredients: [], pendingPhotoBase64: null };
     let dashboardRequestId = 0;
     let dashboardFilterTimer;
     let orderRequestId = 0;
@@ -32,29 +32,115 @@
         } catch (e) { console.error(e); }
     }
 
+    window.updateLoginMode = function() {
+        const isOwner = document.getElementById('loginUsername')?.value === 'owner';
+        const emailGroup = document.getElementById('loginEmailGroup');
+        const emailInput = document.getElementById('loginEmail');
+        if (emailGroup) emailGroup.style.display = isOwner ? 'block' : 'none';
+        if (emailInput) emailInput.required = isOwner;
+    };
+
     window.togglePassword = function() { const input = document.getElementById('loginPassword'); const icon = document.getElementById('passwordIcon'); if (input.type === 'password') { input.type = 'text'; icon.classList.remove('fa-eye'); icon.classList.add('fa-eye-slash'); } else { input.type = 'password'; icon.classList.remove('fa-eye-slash'); icon.classList.add('fa-eye'); } };
+
+    async function activateUser(user, authUserId = null) {
+        state.currentUser = user;
+        state.authUserId = authUserId;
+        document.getElementById('loginPage').style.display = 'none';
+        document.getElementById('mainApp').style.display = 'flex';
+        document.body.classList.toggle('role-kasir', user.role === 'kasir');
+        document.getElementById('userName').innerText = user.full_name;
+        document.getElementById('userName2').innerText = user.full_name;
+        document.getElementById('userRole').innerText = user.role === 'owner' ? 'Administrator' : 'Kasir';
+        document.getElementById('userRole2').innerText = user.role === 'owner' ? 'Administrator' : 'Kasir';
+        document.getElementById('userAvatar').innerText = user.full_name.charAt(0).toUpperCase();
+        document.getElementById('userAvatar2').innerText = user.full_name.charAt(0).toUpperCase();
+        document.querySelectorAll('.nav-item[data-page]').forEach(button => {
+            button.style.display = button.classList.contains('owner-only') && user.role === 'kasir' ? 'none' : 'flex';
+        });
+        await window.navigate('dashboard');
+    }
 
     window.handleLogin = async function(e) {
         if (e) { e.preventDefault(); e.stopPropagation(); }
-        const username = document.getElementById('loginUsername').value.trim(); const password = document.getElementById('loginPassword').value;
-        if (!username || !password) { showToast('Lengkapi username dan password!', true); return false; }
-        const btn = document.getElementById('loginBtn'); const originalText = btn.innerHTML; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Memproses...'; btn.disabled = true;
+        const username = document.getElementById('loginUsername').value.trim();
+        const password = document.getElementById('loginPassword').value;
+        const email = document.getElementById('loginEmail')?.value.trim();
+        const btn = document.getElementById('loginBtn');
+        const originalText = btn.innerHTML;
+        if (!username || !password || (username === 'owner' && !email)) {
+            showToast(username === 'owner' ? 'Masukkan email dan password akun Owner.' : 'Lengkapi username dan password!', true);
+            return false;
+        }
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Memproses...';
+        btn.disabled = true;
         try {
-            const { data, error } = await supabase.from('app_users').select('*').eq('username', username).eq('password_hash', password).eq('is_active', true).single();
-            if (error || !data) { showToast('Username atau password salah!', true); btn.innerHTML = originalText; btn.disabled = false; return false; }
-            state.currentUser = data;
-            document.getElementById('loginPage').style.display = 'none'; document.getElementById('mainApp').style.display = 'flex';
-            document.body.classList.toggle('role-kasir', data.role === 'kasir');
-            document.getElementById('userName').innerText = data.full_name; document.getElementById('userName2').innerText = data.full_name;
-            document.getElementById('userRole').innerText = data.role === 'owner' ? 'Administrator' : 'Kasir'; document.getElementById('userRole2').innerText = data.role === 'owner' ? 'Administrator' : 'Kasir';
-            document.getElementById('userAvatar').innerText = data.full_name.charAt(0).toUpperCase(); document.getElementById('userAvatar2').innerText = data.full_name.charAt(0).toUpperCase();
-            document.querySelectorAll('.nav-item[data-page]').forEach(b => { b.style.display = (b.classList.contains('owner-only') && data.role === 'kasir') ? 'none' : 'flex'; });
-            window.navigate('dashboard');
-        } catch (err) { showToast('Terjadi kesalahan: ' + err.message, true); btn.innerHTML = originalText; btn.disabled = false; }
+            if (username === 'owner') {
+                const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password });
+                if (authError || !authData?.user) throw new Error('Email atau password akun Owner tidak cocok.');
+                const { data: owner, error: ownerError } = await supabase
+                    .from('app_users')
+                    .select('id, username, full_name, role, is_active, avatar_url, auth_user_id')
+                    .eq('auth_user_id', authData.user.id)
+                    .eq('role', 'owner')
+                    .eq('is_active', true)
+                    .maybeSingle();
+                if (ownerError || !owner) {
+                    await supabase.auth.signOut();
+                    throw new Error('Akun Auth ini belum terhubung ke Owner MasuSpace.');
+                }
+                await activateUser(owner, authData.user.id);
+            } else {
+                await supabase.auth.signOut();
+                const { data: cashier, error } = await supabase
+                    .from('app_users')
+                    .select('id, username, full_name, role, is_active, avatar_url')
+                    .eq('username', username)
+                    .eq('password_hash', password)
+                    .eq('is_active', true)
+                    .single();
+                if (error || !cashier || cashier.role !== 'kasir') throw new Error('Username atau password kasir salah.');
+                await activateUser(cashier);
+            }
+        } catch (error) {
+            showToast(error.message || 'Gagal masuk.', true);
+        } finally {
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }
         return false;
     };
 
-    window.logout = function() { state.currentUser = null; state.cart = []; document.getElementById('mainApp').style.display = 'none'; document.getElementById('loginPage').style.display = 'flex'; document.getElementById('loginPassword').value = ''; document.body.classList.remove('role-kasir'); window.closeUserMenu(); };
+    window.restoreOwnerSession = async function() {
+        try {
+            const { data: sessionData } = await supabase.auth.getSession();
+            const authUserId = sessionData?.session?.user?.id;
+            if (!authUserId) return;
+            const { data: owner } = await supabase.from('app_users')
+                .select('id, username, full_name, role, is_active, avatar_url, auth_user_id')
+                .eq('auth_user_id', authUserId)
+                .eq('role', 'owner')
+                .eq('is_active', true)
+                .maybeSingle();
+            if (owner) await activateUser(owner, authUserId);
+            else await supabase.auth.signOut();
+        } catch (error) {
+            console.error('Gagal memulihkan sesi Owner:', error);
+        }
+    };
+
+    window.logout = async function() {
+        if (state.authUserId) await supabase.auth.signOut();
+        state.currentUser = null;
+        state.authUserId = null;
+        state.cart = [];
+        document.getElementById('mainApp').style.display = 'none';
+        document.getElementById('loginPage').style.display = 'flex';
+        document.getElementById('loginPassword').value = '';
+        document.getElementById('loginEmail').value = '';
+        document.body.classList.remove('role-kasir');
+        window.closeUserMenu();
+    };
+    
     window.toggleUserMenu = function() { document.getElementById('userDropdown').classList.toggle('show'); };
     window.closeUserMenu = function() { document.getElementById('userDropdown').classList.remove('show'); };
     document.addEventListener('click', function(e) { const userMenu = document.querySelector('.user-menu'); if (userMenu && !userMenu.contains(e.target)) window.closeUserMenu(); });
@@ -209,14 +295,17 @@
         content.innerHTML = '<div style="text-align:center;padding:20px">Memuat...</div>';
         document.getElementById('dailyReportModal').classList.add('active');
         try {
-            const [orderResult, expenseResult] = await Promise.all([
-                supabase.from('orders').select('*').gte('created_at', dayStart).lt('created_at', dayEnd).in('status', ['paid', 'completed']),
-                supabase.from('expenses').select('amount, cash_sources(name)').gte('created_at', dayStart).lt('created_at', dayEnd)
+            const [orderResult, expenseResult, cashResult] = await Promise.all([
+                supabase.from('orders').select('id,order_number,customer_name,total,payment_method,created_at').gte('created_at', dayStart).lt('created_at', dayEnd).in('status', ['paid', 'completed']),
+                supabase.from('expenses').select('amount, cash_sources(name)').gte('created_at', dayStart).lt('created_at', dayEnd),
+                supabase.rpc('get_cash_sources')
             ]);
             if (orderResult.error) throw orderResult.error;
             if (expenseResult.error) throw expenseResult.error;
+            if (cashResult.error) throw cashResult.error;
             const orders = orderResult.data || [];
             const expenses = expenseResult.data || [];
+            const systemCashBalance = Number((cashResult.data || []).find(source => source.name === 'Cash Kasir')?.current_balance || 0);
             const totalRevenue = orders.reduce((sum, order) => sum + Number(order.total || 0), 0);
             const totalExpenses = expenses.reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
             const qrisSales = orders.filter(order => order.payment_method === 'qris').reduce((sum, order) => sum + Number(order.total || 0), 0);
@@ -225,6 +314,26 @@
             const cashSales = totalRevenue - nonCashSales;
             const cashierExpenses = expenses.filter(expense => expense.cash_sources?.name === 'Cash Kasir').reduce((sum, expense) => sum + Number(expense.amount || 0), 0);
             const cashierBalanceToday = cashSales - cashierExpenses;
+            let orderItems = [];
+            if (orders.length) {
+                const { data, error } = await supabase.from('order_items').select('order_id,qty,products(name)').in('order_id', orders.map(order => order.id));
+                if (error) throw error;
+                orderItems = data || [];
+            }
+            const itemsByOrder = new Map();
+            orderItems.forEach(item => {
+                const name = item.products?.name || 'Menu';
+                const items = itemsByOrder.get(item.order_id) || [];
+                items.push(escapeHtml(name) + ' × ' + Number(item.qty || 0));
+                itemsByOrder.set(item.order_id, items);
+            });
+            const closingPanel = state.currentUser?.role === 'owner' && state.authUserId
+                ? '<section id="cashierClosePanel" class="page-section" style="margin-top:18px"><h4 style="margin:0 0 8px">Tutup Kasir</h4><p style="margin:0 0 12px;color:var(--text-light)">Saldo sistem Cash Kasir: <b>' + formatRp(systemCashBalance) + '</b>. Hitung uang fisik, lalu setor ke Cash Umum. Saldo Cash Kasir akan mulai dari Rp 0.</p><div class="input-group"><label>Uang fisik yang dihitung (Rp)</label><input id="cashierPhysicalCash" type="number" min="0" step="1" inputmode="numeric" placeholder="Masukkan hasil hitung fisik"></div><div class="input-group"><label>Catatan selisih (opsional)</label><input id="cashierCloseNotes" type="text" maxlength="500" placeholder="Contoh: selisih karena uang kembalian"></div><button class="btn-primary" onclick="window.closeCashierShift()"><i class="fas fa-lock"></i> Tutup Kasir & Setor ke Cash Umum</button></section>'
+                : '';
+            const orderList = orders.map(order => {
+                const menu = itemsByOrder.get(order.id) || [];
+                return '<div style="display:flex;justify-content:space-between;gap:12px;padding:8px;border-bottom:1px solid var(--border);font-size:12px"><span>' + (menu.join(', ') || 'Tidak ada detail menu') + '</span><b>' + formatRp(order.total) + '</b></div>';
+            }).join('');
             content.innerHTML =
                 '<div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,360px),1fr));gap:10px;margin-bottom:16px">' +
                     '<div class="stat-card"><div class="stat-info"><div class="stat-label">TOTAL PENJUALAN</div><div class="stat-value" style="font-size:18px">' + formatRp(totalRevenue) + '</div></div></div>' +
@@ -238,12 +347,44 @@
                     '<div style="display:flex;justify-content:space-between;padding:6px 0"><span>QRIS</span><b>' + formatRp(qrisSales) + '</b></div>' +
                     '<div style="display:flex;justify-content:space-between;padding:6px 0"><span>Debit</span><b>' + formatRp(debitSales) + '</b></div>' +
                 '</div>' +
-                '<h4 style="margin:16px 0 10px">Daftar Order Hari Ini</h4>' +
+                '<h4 style="margin:16px 0 10px">Menu Terjual Hari Ini</h4>' +
                 '<div style="max-height:200px;overflow-y:auto">' +
-                    (orders.map(order => '<div style="display:flex;justify-content:space-between;padding:8px;border-bottom:1px solid var(--border);font-size:12px"><span><b>' + order.order_number + '</b> - ' + (order.customer_name || 'Walk-in') + '</span><b>' + formatRp(order.total) + '</b></div>').join('') || '<p style="color:var(--text-light);text-align:center;padding:20px">Belum ada order</p>') +
-                '</div>';
-        } catch (error) { content.innerHTML = '<p style="color:#ef4444;text-align:center">Gagal memuat: ' + error.message + '</p>'; }
+                    (orderList || '<p style="color:var(--text-light);text-align:center;padding:20px">Belum ada penjualan</p>') +
+                '</div>' + closingPanel;
+        } catch (error) {
+            content.innerHTML = '<p style="color:#ef4444;text-align:center">Gagal memuat: ' + escapeHtml(error.message) + '</p>';
+        }
     };
+
+    window.closeCashierShift = async function() {
+        if (state.currentUser?.role !== 'owner' || !state.authUserId) {
+            showToast('Hanya Owner yang masuk lewat Supabase Auth dapat menutup kasir.', true);
+            return;
+        }
+        const field = document.getElementById('cashierPhysicalCash');
+        const physicalCash = Number(field?.value);
+        if (!field || field.value.trim() === '' || !Number.isSafeInteger(physicalCash) || physicalCash < 0) {
+            showToast('Masukkan hitung fisik dalam angka rupiah bulat.', true);
+            return;
+        }
+        if (!window.confirm('Setor ' + formatRp(physicalCash) + ' ke Cash Umum dan mulai saldo Cash Kasir dari Rp 0?')) return;
+        const button = document.querySelector('#cashierClosePanel button');
+        if (button) { button.disabled = true; button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Memproses...'; }
+        try {
+            const notes = document.getElementById('cashierCloseNotes')?.value.trim() || null;
+            const { data, error } = await supabase.rpc('close_cashier_shift', { p_physical_cash: physicalCash, p_notes: notes });
+            if (error) throw error;
+            if (!data?.success) throw new Error(data?.message || 'Penutupan kasir gagal.');
+            const panel = document.getElementById('cashierClosePanel');
+            if (panel) panel.innerHTML = '<h4 style="margin:0 0 8px">Kasir berhasil ditutup</h4><p>Saldo sistem: ' + formatRp(data.expected_balance) + ' · Fisik: ' + formatRp(data.physical_balance) + ' · Selisih: ' + formatRp(data.difference) + '</p><p>Setoran ke Cash Umum: ' + formatRp(data.physical_balance) + '. Saldo Cash Kasir sekarang Rp 0.</p>';
+            showToast('Kasir ditutup; saldo disetor ke Cash Umum.');
+            await window.loadCash();
+        } catch (error) {
+            showToast(error.message || 'Tutup kasir gagal.', true);
+            if (button) { button.disabled = false; button.innerHTML = '<i class="fas fa-lock"></i> Tutup Kasir & Setor ke Cash Umum'; }
+        }
+    };
+
     async function loadOrders() {
         const requestId = ++orderRequestId;
         const start = document.getElementById('orderFilterStart')?.value;
@@ -701,6 +842,8 @@
 
     document.addEventListener('DOMContentLoaded', function() {
         loadUsersToDropdown();
+        document.getElementById('loginUsername')?.addEventListener('change', window.updateLoginMode);
+        window.restoreOwnerSession();
         ['dashboardStartDate', 'dashboardEndDate'].forEach(id => document.getElementById(id)?.addEventListener('change', window.applyDashboardFilter));
         ['orderFilterStart', 'orderFilterEnd'].forEach(id => document.getElementById(id)?.addEventListener('change', () => {
             clearTimeout(orderFilterTimer);
