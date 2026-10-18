@@ -462,62 +462,91 @@
     window.editIngredient = async function(id) { const { data } = await supabase.from('ingredients').select('*').eq('id', id).single(); if (!data) return; document.getElementById('ingredientFormTitle').innerText = 'Edit Bahan'; document.getElementById('editIngredientId').value = data.id; document.getElementById('editIngredientName').value = data.name; document.getElementById('editIngredientStock').value = data.stock_qty; document.getElementById('editIngredientUnit').value = data.unit; document.getElementById('editIngredientMin').value = data.min_stock; document.getElementById('editIngredientPrice').value = data.buy_price; document.getElementById('editIngredientSupplier').value = data.supplier || ''; document.getElementById('ingredientFormModal').classList.add('active'); };
     window.saveIngredient = async function() { const id = document.getElementById('editIngredientId').value || null; const name = document.getElementById('editIngredientName').value.trim(); const stock = parseFloat(document.getElementById('editIngredientStock').value) || 0; const unit = document.getElementById('editIngredientUnit').value || 'gram'; const min = parseFloat(document.getElementById('editIngredientMin').value) || 0; const price = parseFloat(document.getElementById('editIngredientPrice').value) || 0; const supplier = document.getElementById('editIngredientSupplier').value; if (!name) { showToast('Nama wajib!', true); return; } if (id) { const { error } = await supabase.from('ingredients').update({ name, stock_qty: stock, unit, min_stock: min, buy_price: price, supplier, updated_at: new Date().toISOString() }).eq('id', id); if (error) { showToast('Gagal: ' + error.message, true); return; } } else { const { error } = await supabase.from('ingredients').insert({ name, stock_qty: stock, unit, min_stock: min, buy_price: price, supplier, is_active: true }); if (error) { showToast('Gagal: ' + error.message, true); return; } } showToast('Bahan disimpan!'); window.closeModal('ingredientFormModal'); await loadInventory(); };
 
-            async function loadCash() { 
-        const { data } = await supabase.rpc('get_cash_sources'); 
-        const sources = data || []; 
-        
-        document.getElementById('cashSourcesGrid').innerHTML = sources.map(s => `
-            <div class="cash-card">
-                <h4><i class="fas fa-vault" style="color:var(--primary)"></i>${s.name}</h4>
-                <div class="balance">${formatRp(s.current_balance)}</div>
-                <div class="cash-card-actions">
-                    <button class="cash-action-btn primary" onclick="window.showCashAction('transfer', '${s.id}', '${s.name}')">
-                        <i class="fas fa-arrow-right-arrow-left"></i> Transfer
-                    </button>
-                    <button class="cash-action-btn" onclick="window.showCashAction('physical', '${s.id}', '${s.name}')">
-                        <i class="fas fa-calculator"></i> Hitung Fisik
-                    </button>
+            async function loadCash() {
+        const cashSourcesGrid = document.getElementById('cashSourcesGrid');
+        const cashMutationsBody = document.getElementById('cashMutationsBody');
+        const showCashLoadError = message => {
+            if (cashSourcesGrid) cashSourcesGrid.innerHTML = `<div class="empty-state">${message}</div>`;
+            if (cashMutationsBody) cashMutationsBody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-light)">${message}</td></tr>`;
+            showToast(message, true);
+        };
+        try {
+            const { data, error: sourcesError } = await supabase.rpc('get_cash_sources');
+            if (sourcesError) {
+                console.error('Gagal memuat sumber kas:', sourcesError);
+                const { data: sessionData } = await supabase.auth.getSession();
+                const hasOwnerSession = state.currentUser?.role === 'owner'
+                    && state.authUserId
+                    && sessionData?.session?.user?.id === state.authUserId;
+                const message = hasOwnerSession
+                    ? 'Data kas gagal dimuat. Periksa koneksi atau muat ulang halaman.'
+                    : 'Sesi Owner tidak aktif. Login kembali untuk membuka Kas & Bank.';
+                showCashLoadError(message);
+                if (!hasOwnerSession && state.currentUser?.role === 'owner') await window.logout();
+                return;
+            }
+            const sources = data || [];
+            if (cashSourcesGrid) cashSourcesGrid.innerHTML = sources.length ? sources.map(s => `
+                <div class="cash-card">
+                    <h4><i class="fas fa-vault" style="color:var(--primary)"></i>${escapeHtml(s.name)}</h4>
+                    <div class="balance">${formatRp(s.current_balance)}</div>
+                    <div class="cash-card-actions">
+                        <button class="cash-action-btn primary" onclick="window.showCashAction('transfer', '${s.id}', '${escapeHtml(s.name)}')">
+                            <i class="fas fa-arrow-right-arrow-left"></i> Transfer
+                        </button>
+                        <button class="cash-action-btn" onclick="window.showCashAction('physical', '${s.id}', '${escapeHtml(s.name)}')">
+                            <i class="fas fa-calculator"></i> Hitung Fisik
+                        </button>
+                    </div>
                 </div>
-            </div>
-        `).join(''); 
-        
-        const start = document.getElementById('cashFilterStart')?.value; 
-        const end = document.getElementById('cashFilterEnd')?.value; 
-        let query = supabase.from('cash_mutations').select('*, cash_sources(name)').order('created_at', { ascending: false }).limit(100); 
-        if (start) query = query.gte('created_at', start + 'T00:00:00+07:00'); 
-        if (end) query = query.lte('created_at', end + 'T23:59:59+07:00'); 
-        const { data: muts } = await query; 
-        const m = muts || []; 
-        
-        document.getElementById('cashMutationsBody').innerHTML = m.length ? m.map(mut => `
-            <tr>
-                <td style="font-weight:500">${new Date(mut.created_at).toLocaleString('id-ID')}</td>
-                <td><b>${mut.cash_sources?.name || '-'}</b></td>
-                <td><span class="badge badge-${mut.type==='in'?'success':'warning'}"><i class="fas fa-${mut.type==='in'?'arrow-down':'arrow-up'}" style="margin-right:4px"></i>${mut.type.toUpperCase()}</span></td>
-                <td style="color:var(--text)">${mut.description || '-'}</td>
-                <td style="color:${mut.type==='in'?'var(--primary)':'#ef4444'};font-weight:800;font-size:14px">
-                    ${mut.type==='in'?'+':'-'}${formatRp(mut.amount)}
-                </td>
-                <td class="mutation-action-btns">
-                    <button class="view-btn" onclick="window.viewMutationDetail('${mut.id}')" title="Lihat Detail">
-                        <i class="fas fa-eye"></i>
-                    </button>
-                    <button class="edit-btn" onclick="window.editMutation('${mut.id}')" title="${['manual', 'adjustment'].includes(mut.reference_type) ? 'Edit mutasi' : 'Transaksi terkait dikunci'}" ${['manual', 'adjustment'].includes(mut.reference_type) ? '' : 'disabled'}>
-                        <i class="fas fa-pen"></i>
-                    </button>
-                    <button class="delete-mut-btn" onclick="window.deleteMutation('${mut.id}')" title="${['manual', 'adjustment'].includes(mut.reference_type) ? 'Hapus mutasi' : 'Transaksi terkait dikunci'}" ${['manual', 'adjustment'].includes(mut.reference_type) ? '' : 'disabled'}>
-                        <i class="fas fa-trash"></i>
-                    </button>
-                </td>
-            </tr>
-        `).join('') : '<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-light)"><i class="fas fa-inbox" style="font-size:32px;margin-bottom:8px;opacity:0.3"></i><p>Belum ada mutasi kas</p></td></tr>'; 
-        
-        const fromSelect = document.getElementById('transferFrom'); 
-        const toSelect = document.getElementById('transferTo'); 
-        const addSourceSelect = document.getElementById('addMutationSource');
-        if (fromSelect) fromSelect.innerHTML = sources.map(s => `<option value="${s.id}">${s.name} (${formatRp(s.current_balance)})</option>`).join(''); 
-        if (toSelect) toSelect.innerHTML = sources.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
-        if (addSourceSelect) addSourceSelect.innerHTML = sources.map(s => `<option value="${s.id}">${s.name} (${formatRp(s.current_balance)})</option>`).join('');
+            `).join('') : '<div class="empty-state">Belum ada sumber kas aktif.</div>';
+
+            const start = document.getElementById('cashFilterStart')?.value;
+            const end = document.getElementById('cashFilterEnd')?.value;
+            let query = supabase.from('cash_mutations').select('*, cash_sources(name)').order('created_at', { ascending: false }).limit(100);
+            if (start) query = query.gte('created_at', start + 'T00:00:00+07:00');
+            if (end) query = query.lte('created_at', end + 'T23:59:59+07:00');
+            const { data: muts, error: mutationsError } = await query;
+            if (mutationsError) {
+                console.error('Gagal memuat riwayat mutasi kas:', mutationsError);
+                if (cashMutationsBody) cashMutationsBody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-light)">Saldo kas berhasil dimuat, tetapi riwayat mutasi gagal dimuat. Coba muat ulang.</td></tr>';
+                showToast('Saldo kas tersedia, riwayat mutasi gagal dimuat.', true);
+            } else {
+                const mutations = muts || [];
+                if (cashMutationsBody) cashMutationsBody.innerHTML = mutations.length ? mutations.map(mut => `
+                    <tr>
+                        <td style="font-weight:500">${new Date(mut.created_at).toLocaleString('id-ID')}</td>
+                        <td><b>${escapeHtml(mut.cash_sources?.name || '-')}</b></td>
+                        <td><span class="badge badge-${mut.type === 'in' ? 'success' : 'warning'}"><i class="fas fa-${mut.type === 'in' ? 'arrow-down' : 'arrow-up'}" style="margin-right:4px"></i>${escapeHtml(mut.type.toUpperCase())}</span></td>
+                        <td style="color:var(--text)">${escapeHtml(mut.description || '-')}</td>
+                        <td style="color:${mut.type === 'in' ? 'var(--primary)' : '#ef4444'};font-weight:800;font-size:14px">
+                            ${mut.type === 'in' ? '+' : '-'}${formatRp(mut.amount)}
+                        </td>
+                        <td class="mutation-action-btns">
+                            <button class="view-btn" onclick="window.viewMutationDetail('${mut.id}')" title="Lihat Detail">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                            <button class="edit-btn" onclick="window.editMutation('${mut.id}')" title="${['manual', 'adjustment'].includes(mut.reference_type) ? 'Edit mutasi' : 'Transaksi terkait dikunci'}" ${['manual', 'adjustment'].includes(mut.reference_type) ? '' : 'disabled'}>
+                                <i class="fas fa-pen"></i>
+                            </button>
+                            <button class="delete-mut-btn" onclick="window.deleteMutation('${mut.id}')" title="${['manual', 'adjustment'].includes(mut.reference_type) ? 'Hapus mutasi' : 'Transaksi terkait dikunci'}" ${['manual', 'adjustment'].includes(mut.reference_type) ? '' : 'disabled'}>
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `).join('') : '<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-light)"><i class="fas fa-inbox" style="font-size:32px;margin-bottom:8px;opacity:0.3"></i><p>Belum ada mutasi kas</p></td></tr>';
+            }
+
+            const fromSelect = document.getElementById('transferFrom');
+            const toSelect = document.getElementById('transferTo');
+            const addSourceSelect = document.getElementById('addMutationSource');
+            if (fromSelect) fromSelect.innerHTML = sources.map(s => `<option value="${s.id}">${escapeHtml(s.name)} (${formatRp(s.current_balance)})</option>`).join('');
+            if (toSelect) toSelect.innerHTML = sources.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join('');
+            if (addSourceSelect) addSourceSelect.innerHTML = sources.map(s => `<option value="${s.id}">${escapeHtml(s.name)} (${formatRp(s.current_balance)})</option>`).join('');
+        } catch (error) {
+            console.error('Kesalahan tak terduga saat memuat Kas & Bank:', error);
+            showCashLoadError('Kas & Bank gagal dimuat. Coba muat ulang halaman atau login kembali.');
+        }
     }
     window.loadCash = loadCash;
 
