@@ -502,10 +502,10 @@
                     <button class="view-btn" onclick="window.viewMutationDetail('${mut.id}')" title="Lihat Detail">
                         <i class="fas fa-eye"></i>
                     </button>
-                    <button class="edit-btn" onclick="window.editMutation('${mut.id}')" title="Edit">
+                    <button class="edit-btn" onclick="window.editMutation('${mut.id}')" title="${['manual', 'adjustment'].includes(mut.reference_type) ? 'Edit mutasi' : 'Transaksi terkait dikunci'}" ${['manual', 'adjustment'].includes(mut.reference_type) ? '' : 'disabled'}>
                         <i class="fas fa-pen"></i>
                     </button>
-                    <button class="delete-mut-btn" onclick="window.deleteMutation('${mut.id}')" title="Hapus">
+                    <button class="delete-mut-btn" onclick="window.deleteMutation('${mut.id}')" title="${['manual', 'adjustment'].includes(mut.reference_type) ? 'Hapus mutasi' : 'Transaksi terkait dikunci'}" ${['manual', 'adjustment'].includes(mut.reference_type) ? '' : 'disabled'}>
                         <i class="fas fa-trash"></i>
                     </button>
                 </td>
@@ -604,15 +604,16 @@
             if (error || !data?.success) { showToast(data?.message || 'Gagal', true); return; } 
             showToast('Transfer berhasil!'); 
         } else { 
-            const { data: source } = await supabase.from('cash_sources').select('current_balance').eq('id', sourceId).single(); 
-            if (!source) return; 
-            const diff = amount - source.current_balance; 
-            if (diff !== 0) { 
-                const type = diff > 0 ? 'in' : 'out'; 
-                await supabase.from('cash_sources').update({ current_balance: amount }).eq('id', sourceId); 
-                await supabase.from('cash_mutations').insert({ source_id: sourceId, type, amount: Math.abs(diff), reference_type: 'adjustment', description: `Penyesuaian fisik: ${desc || 'Selisih hitung fisik'}`, created_by: state.currentUser?.id }); 
-            } 
-            showToast('Hitung fisik disimpan!'); 
+            const { data, error } = await supabase.rpc('reconcile_cash_balance', {
+                p_source_id: sourceId,
+                p_physical_balance: amount,
+                p_description: desc
+            });
+            if (error || !data?.success) {
+                showToast('Gagal menyimpan hitung fisik: ' + (error?.message || data?.message || 'Unknown'), true);
+                return;
+            }
+            showToast(data.no_change ? 'Saldo fisik sudah sesuai dengan saldo sistem.' : 'Hitung fisik disimpan dan selisih dicatat.'); 
         } 
         window.closeModal('cashActionModal'); 
         await loadCash(); 
@@ -672,7 +673,7 @@
     };
     
     window.deleteMutation = async function(mutationId) { 
-        if (!confirm('Hapus mutasi ini?\n\nSemua data terkait (order/expense) akan ikut terhapus dan saldo akan dikembalikan.')) return; 
+        if (!confirm('Hapus mutasi manual atau penyesuaian fisik ini? Saldo dan jurnal terkait akan dibalik. Penjualan, pengeluaran, transfer, dan tutup kasir tidak dapat dihapus dari sini.')) return; 
         const { data, error } = await supabase.rpc('delete_cash_mutation', { p_mutation_id: mutationId }); 
         if (error || !data?.success) { showToast('Gagal: ' + (error?.message || 'Unknown'), true); return; } 
         showToast('Mutasi berhasil dihapus!'); 
