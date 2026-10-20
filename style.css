@@ -324,3 +324,16 @@ body.role-kasir .order-action-btns button:nth-child(n+2) { display:none; }
     .date-range-filter { flex-wrap:wrap; }
 }
 body.role-kasir .owner-only { display:none !important; }
+.payment-row.tax-row { color: #d97706; }
+.product-img {
+    height: 75px;
+    background: linear-gradient(135deg, var(--primary-light), var(--bg));
+    border-radius: 8px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    background-size: cover;
+    background-position: center;
+}
