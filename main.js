@@ -1,6 +1,6 @@
 /* =====================================================================
    MASUSPACE POS - main.js
-   Full Optimized & Secured Version
+   Full Optimized & Secured Version (Fast Realtime & Shift Reset)
    ===================================================================== */
 (function () {
     const SUPABASE_URL = 'https://lgyrypbzaspysibssttm.supabase.co';
@@ -18,11 +18,11 @@
         paymentMethod: 'cash', cashReceived: 0, discount: { type: 'percent', value: 0 },
         taxConfig: { enabled: false, rate: 0 }, storeInfo: { name: 'MasuSpace Coffee' },
         orderType: 'dine_in', currentReceipt: null, kasirExpenses: [], pendingPhotoBase64: null,
-        lastDailyData: null
+        lastDailyData: null, lastClosedAt: null, showFullDayHistory: false,
+        cachedOrders: [], cachedMenuByOrder: new Map()
     };
 
     let dashboardRequestId = 0, dashboardFilterTimer;
-    let orderRequestId = 0, orderFilterTimer;
     let reportRequestId = 0, reportFilterTimer;
     let toastTimer;
 
@@ -64,7 +64,6 @@
         }
     }
 
-    // Helper kompresi gambar agar tidak membengkak di database
     function compressImage(file, maxDimension, quality = 0.8) {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
@@ -104,6 +103,9 @@
                     }
                     if (r.key === 'store_info' && r.value) {
                         state.storeInfo = r.value;
+                    }
+                    if (r.key === 'last_cashier_close' && r.value?.closed_at) {
+                        state.lastClosedAt = r.value.closed_at;
                     }
                 });
             }
@@ -176,7 +178,7 @@
                     .eq('auth_user_id', authData.user.id).eq('role', 'owner').eq('is_active', true).maybeSingle();
                 if (ownerError || !owner) {
                     await supabase.auth.signOut();
-                    throw new Error('Akun Auth ini belum terhubung ke tabel Owner MasuSpace (cek kolom auth_user_id).');
+                    throw new Error('Akun Auth ini belum terhubung ke tabel Owner MasuSpace.');
                 }
                 await activateUser(owner, authData.user.id);
             } else {
@@ -274,13 +276,20 @@
         const startDate = startInput?.value || today;
         const endDate = endInput?.value || today;
         if (startDate > endDate) { showToast('Tanggal awal tidak boleh melewati tanggal akhir.', true); return; }
+
         const rangeStart = dayStartISO(startDate);
         const rangeEnd = dayEndExclusiveISO(endDate);
+        const isToday = startDate === today && endDate === today;
+
+        // Jika hari ini dan sudah tutup kasir, cash kasir reset ke 0 untuk shift baru
+        const lastClosed = state.lastClosedAt || localStorage.getItem('masuspace_last_closed_at');
+        const isClosedToday = lastClosed && new Date(lastClosed) >= new Date(rangeStart);
+        const effectiveCashStart = (isToday && isClosedToday) ? lastClosed : rangeStart;
 
         try {
             const [ordersResult, expensesResult, inventoryResult] = await Promise.all([
-                supabase.from('orders').select('id,total,payment_method').gte('created_at', rangeStart).lt('created_at', rangeEnd).in('status', ['paid', 'completed']),
-                supabase.from('expenses').select('amount,cash_sources(name)').gte('created_at', rangeStart).lt('created_at', rangeEnd),
+                supabase.from('orders').select('id,total,payment_method,created_at').gte('created_at', rangeStart).lt('created_at', rangeEnd).in('status', ['paid', 'completed']),
+                supabase.from('expenses').select('amount,cash_sources(name),created_at').gte('created_at', rangeStart).lt('created_at', rangeEnd),
                 supabase.rpc('get_inventory_summary')
             ]);
             if (requestId !== dashboardRequestId) return;
@@ -304,9 +313,17 @@
             const pay = { cash: 0, qris: 0, debit: 0 };
             orders.forEach(o => { if (pay[o.payment_method] !== undefined) pay[o.payment_method] += Number(o.total || 0); });
 
-            // LOGIKA CASH REGISTER: Total Penjualan dikurangi QRIS & Debit dikurangi Pengeluaran Kasir
-            const cashierExpenses = expenses.filter(x => x.cash_sources?.name === 'Cash Kasir').reduce((s, x) => s + Number(x.amount || 0), 0) || totalExpense;
-            const netCashInRegister = Math.max(0, (totalRevenue - (pay.qris + pay.debit)) - cashierExpenses);
+            // Hitung Cash Kasir Aktif (setelah shift tutup terakhir)
+            const activeShiftOrders = (isToday && isClosedToday)
+                ? orders.filter(o => new Date(o.created_at) >= new Date(effectiveCashStart))
+                : orders;
+            const activeShiftExpenses = (isToday && isClosedToday)
+                ? expenses.filter(x => new Date(x.created_at) >= new Date(effectiveCashStart))
+                : expenses;
+
+            const activeCashSales = activeShiftOrders.filter(o => o.payment_method === 'cash').reduce((s, o) => s + Number(o.total || 0), 0);
+            const activeCashierExpenses = activeShiftExpenses.filter(x => x.cash_sources?.name === 'Cash Kasir').reduce((s, x) => s + Number(x.amount || 0), 0);
+            const netCashInRegister = Math.max(0, activeCashSales - activeCashierExpenses);
 
             const lowStock = inventoryResult.error ? 0 : (Number(inventoryResult.data?.low_stock || 0) + Number(inventoryResult.data?.out_of_stock || 0));
 
@@ -318,7 +335,6 @@
             document.getElementById('statCash').innerText = formatRp(netCashInRegister);
             document.getElementById('statLowStock').innerText = lowStock;
 
-            const isToday = startDate === today && endDate === today;
             document.getElementById('dashboardPaymentTitle').innerText = isToday ? 'Pembayaran Hari Ini' : 'Pembayaran Periode';
 
             const row = (icon, label, val, last) => `<div style="display:flex;justify-content:space-between;padding:10px 0;${last ? '' : 'border-bottom:1px solid var(--border)'}"><span><i class="fas ${icon}" style="color:var(--primary);margin-right:8px"></i>${label}</span><b>${formatRp(val)}</b></div>`;
@@ -729,6 +745,8 @@
             document.getElementById('tableNumber').value = '';
             window.closeModal('paymentModal');
             loadKasirExpenses();
+            // Refresh cache order di background agar riwayat langsung terupdate
+            loadOrders(true);
             setTimeout(window.showReceipt, 300);
         } catch (e) {
             showToast('❌ ' + (e.message || 'Transaksi gagal'), true);
@@ -877,27 +895,30 @@
     };
 
     /* =====================================================================
-       LOGIKA TUTUP KASIR & LAPORAN HARIAN (YANG SUDAH DIPERBAIKI)
-       Rumus: 
-       - Total Penjualan
-       - Non Tunai = QRIS + Debit
-       - Penjualan Cash = Total Penjualan - QRIS - Debit
-       - Pengeluaran Kasir Hari Ini
-       - Uang Cash Seharusnya di Kasir = Penjualan Cash - Pengeluaran Kasir
-       - Selisih = Uang Fisik Kasir - Uang Cash Seharusnya
+       LOGIKA TUTUP KASIR & LAPORAN HARIAN (RESET KE 0 SETELAH TUTUP)
        ===================================================================== */
+    window.toggleShiftHistoryView = function () {
+        state.showFullDayHistory = !state.showFullDayHistory;
+        window.showDailyReport();
+    };
+
     window.showDailyReport = async function () {
         const today = getTodayJakarta();
         const dayStart = dayStartISO(today);
         const dayEnd = dayEndExclusiveISO(today);
         const content = document.getElementById('dailyReportContent');
-        content.innerHTML = '<div style="text-align:center;padding:30px"><i class="fas fa-spinner fa-spin" style="font-size:24px;color:var(--primary);margin-bottom:10px"></i><p>Menghitung data kasir hari ini...</p></div>';
+        content.innerHTML = '<div style="text-align:center;padding:30px"><i class="fas fa-spinner fa-spin" style="font-size:24px;color:var(--primary);margin-bottom:10px"></i><p>Menghitung data kasir...</p></div>';
         document.getElementById('dailyReportModal')?.classList.add('active');
+
+        // Shift aktif dimulai dari jam tutup kasir terakhir hari ini (jika sudah pernah tutup hari ini)
+        const lastClosed = state.lastClosedAt || localStorage.getItem('masuspace_last_closed_at');
+        const isClosedToday = lastClosed && new Date(lastClosed) >= new Date(dayStart);
+        const queryStart = (isClosedToday && !state.showFullDayHistory) ? lastClosed : dayStart;
 
         try {
             const [orderResult, expenseResult] = await Promise.all([
-                supabase.from('orders').select('id,order_number,customer_name,total,payment_method,created_at').gte('created_at', dayStart).lt('created_at', dayEnd).in('status', ['paid', 'completed']),
-                supabase.from('expenses').select('amount, cash_sources(name)').gte('created_at', dayStart).lt('created_at', dayEnd)
+                supabase.from('orders').select('id,order_number,customer_name,total,payment_method,created_at').gte('created_at', queryStart).lt('created_at', dayEnd).in('status', ['paid', 'completed']),
+                supabase.from('expenses').select('amount, cash_sources(name), created_at').gte('created_at', queryStart).lt('created_at', dayEnd)
             ]);
 
             if (orderResult.error) throw orderResult.error;
@@ -956,11 +977,24 @@
 
             const menuListHtml = [...menuSummary.entries()].length
                 ? [...menuSummary.entries()].map(([name, qty]) => `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px"><span>${escapeHtml(name)}</span><b>${qty} terjual</b></div>`).join('')
-                : '<p style="color:var(--text-light);text-align:center;padding:12px;font-size:12px">Belum ada penjualan hari ini</p>';
+                : '<p style="color:var(--text-light);text-align:center;padding:12px;font-size:12px">Belum ada transaksi pada shift ini (Saldo Rp 0)</p>';
+
+            const shiftBadgeHtml = isClosedToday ? `
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;background:var(--bg);padding:8px 12px;border-radius:8px">
+                    <span style="font-size:12px;font-weight:700;color:var(--text)">
+                        <i class="fas ${state.showFullDayHistory ? 'fa-calendar-day' : 'fa-hourglass-start'}" style="color:var(--primary);margin-right:6px"></i>
+                        ${state.showFullDayHistory ? 'Menampilkan: Total Akumulasi 1 Hari' : 'Menampilkan: Shift Baru (Mulai Rp 0)'}
+                    </span>
+                    <button class="btn-secondary" style="font-size:11px;padding:4px 8px" onclick="window.toggleShiftHistoryView()">
+                        ${state.showFullDayHistory ? 'Beralih ke Shift Baru' : 'Lihat Total 1 Hari'}
+                    </button>
+                </div>
+            ` : '';
 
             content.innerHTML = `
+                ${shiftBadgeHtml}
                 <div style="background:var(--primary-50);border:1px solid var(--primary-light);border-radius:12px;padding:14px;margin-bottom:16px">
-                    <div style="font-size:11px;font-weight:700;color:var(--primary-dark);text-transform:uppercase;margin-bottom:4px">Target Uang Kasir (Hari Ini)</div>
+                    <div style="font-size:11px;font-weight:700;color:var(--primary-dark);text-transform:uppercase;margin-bottom:4px">Target Uang Kasir di Laci</div>
                     <div style="font-size:26px;font-weight:800;color:var(--primary-dark);letter-spacing:-0.5px">${formatRp(expectedCashInDrawer)}</div>
                     <div style="font-size:12px;color:var(--text-light);margin-top:4px">
                         Rumus: Penjualan Cash (${formatRp(cashSales)}) - Pengeluaran (${formatRp(cashierExpenses)})
@@ -983,7 +1017,7 @@
                     ${line('Total Penjualan', totalRevenue, true)}
                 </div>
 
-                <!-- FORM TUTUP KASIR (BISA DILAKUKAN KASIR ATAU OWNER) -->
+                <!-- FORM TUTUP KASIR -->
                 <section id="cashierClosePanel" data-expected="${expectedCashInDrawer}" style="background:#fff;border:2px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px">
                     <h3 style="font-size:15px;font-weight:800;margin-bottom:12px;display:flex;align-items:center;gap:8px">
                         <i class="fas fa-cash-register" style="color:var(--primary)"></i> Tutup Kasir / Setor
@@ -1015,7 +1049,7 @@
                 </section>
 
                 <div style="margin-top:16px">
-                    <h4 style="font-size:13px;font-weight:700;margin-bottom:8px">Menu Terjual Hari Ini (${orders.length} Transaksi)</h4>
+                    <h4 style="font-size:13px;font-weight:700;margin-bottom:8px">Menu Terjual Shift Ini (${orders.length} Transaksi)</h4>
                     <div style="max-height:160px;overflow-y:auto;background:var(--bg);padding:10px 12px;border-radius:8px">
                         ${menuListHtml}
                     </div>
@@ -1026,7 +1060,6 @@
         }
     };
 
-    // Realtime update selisih kas saat user mengetik uang fisik
     window.updateCashDifference = function () {
         const panel = document.getElementById('cashierClosePanel');
         const badge = document.getElementById('cashDifferenceBadge');
@@ -1057,7 +1090,6 @@
         }
     };
 
-    // Eksekusi Tutup Kasir
     window.closeCashierShift = async function () {
         const panel = document.getElementById('cashierClosePanel');
         const field = document.getElementById('cashierPhysicalCash');
@@ -1079,7 +1111,7 @@
             return;
         }
 
-        const confirmMsg = `Konfirmasi Tutup Kasir:\n• Uang Cash Seharusnya: ${formatRp(expected)}\n• Uang Fisik Diinput: ${formatRp(physicalCash)}\n• Selisih: ${formatRp(diff)}\n\nLanjutkan proses tutup kasir?`;
+        const confirmMsg = `Konfirmasi Tutup Kasir:\n• Uang Cash Seharusnya: ${formatRp(expected)}\n• Uang Fisik Diinput: ${formatRp(physicalCash)}\n• Selisih: ${formatRp(diff)}\n\nLanjutkan tutup kasir dan setel kasir ke Rp 0 untuk shift berikutnya?`;
         if (!window.confirm(confirmMsg)) return;
 
         const btn = panel.querySelector('button.btn-primary');
@@ -1093,6 +1125,15 @@
 
             if (error) throw error;
 
+            // Catat waktu tutup kasir agar transaksi berikutnya mulai dari 0 (shift baru)
+            const closedTimestamp = new Date().toISOString();
+            state.lastClosedAt = closedTimestamp;
+            state.showFullDayHistory = false;
+            localStorage.setItem('masuspace_last_closed_at', closedTimestamp);
+            try {
+                await supabase.rpc('save_setting', { p_key: 'last_cashier_close', p_value: { closed_at: closedTimestamp, closed_by: state.currentUser?.full_name } });
+            } catch (e) {}
+
             panel.innerHTML = `
                 <div style="text-align:center;padding:16px 8px">
                     <div style="width:48px;height:48px;border-radius:50%;background:var(--primary-light);color:var(--primary-dark);display:flex;align-items:center;justify-content:center;margin:0 auto 12px;font-size:22px">
@@ -1102,21 +1143,24 @@
                     <p style="font-size:13px;color:var(--text-light);margin-bottom:12px">
                         Fisik: <b>${formatRp(physicalCash)}</b> · Seharusnya: <b>${formatRp(expected)}</b> · Selisih: <b>${formatRp(diff)}</b>
                     </p>
+                    <p style="font-size:12px;color:var(--primary-dark);margin-bottom:16px;font-weight:600">
+                        Shift telah ditutup. Laporan kasir aktif direset kembali ke Rp 0.
+                    </p>
                     <button class="btn-primary" style="margin:0 auto" onclick="window.printShiftReportSlip(${physicalCash}, ${expected}, ${diff})">
                         <i class="fas fa-print"></i> Cetak Struk Tutup Kasir
                     </button>
                 </div>
             `;
 
-            showToast('Kasir berhasil ditutup!');
+            showToast('Kasir ditutup! Shift baru dimulai dari Rp 0.');
             if (state.currentUser?.role === 'owner') await window.loadCash();
+            await window.loadDashboard();
         } catch (error) {
             showToast(error.message || 'Gagal menutup kasir.', true);
             if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-lock"></i> Tutup Kasir & Setor'; }
         }
     };
 
-    // Cetak Struk / Slip Laporan Tutup Kasir
     window.printShiftReportSlip = function (physOverride, expOverride, diffOverride) {
         const d = state.lastDailyData;
         if (!d) { showToast('Data belum tersedia untuk dicetak.', true); return; }
@@ -1159,75 +1203,123 @@
         printHtml(slipHtml);
     };
 
-    /* ---------- Riwayat Order ---------- */
+    /* =====================================================================
+       RIWAYAT ORDER (INSTANT FAST CLIENT-SIDE FILTER & PENGHAPUSAN ORDER)
+       ===================================================================== */
     const PAID_STATUS = ['paid', 'completed'];
-    async function loadOrders() {
-        const requestId = ++orderRequestId;
-        const startEl = document.getElementById('orderFilterStart');
-        const endEl = document.getElementById('orderFilterEnd');
-        if (!window._ordersInit) { window._ordersInit = true; startEl.value = endEl.value = getTodayJakarta(); }
-        const start = startEl.value, end = endEl.value;
-        if (start && end && start > end) { showToast('Tanggal awal tidak boleh melewati tanggal akhir.', true); return; }
+
+    function renderFilteredOrders() {
+        const startVal = document.getElementById('orderFilterStart')?.value;
+        const endVal = document.getElementById('orderFilterEnd')?.value;
+
+        let orders = state.cachedOrders || [];
+        if (startVal) {
+            const startTs = new Date(dayStartISO(startVal)).getTime();
+            orders = orders.filter(o => new Date(o.created_at).getTime() >= startTs);
+        }
+        if (endVal) {
+            const endTs = new Date(dayEndExclusiveISO(endVal)).getTime();
+            orders = orders.filter(o => new Date(o.created_at).getTime() < endTs);
+        }
 
         const tableBody = document.getElementById('ordersTableBody');
-        tableBody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px">Memuat riwayat order...</td></tr>';
+        if (!tableBody) return;
 
+        if (!orders.length) {
+            tableBody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text-light)">Tidak ada data transaksi pada rentang tanggal ini</td></tr>';
+            const summary = document.getElementById('ordersSummary');
+            if (summary) summary.innerHTML = '';
+            return;
+        }
+
+        let paidCount = 0, totalCash = 0, totalNonCash = 0, totalRevenue = 0;
+        tableBody.innerHTML = orders.map(o => {
+            const amount = Number(o.total || 0);
+            const isPaid = PAID_STATUS.includes(o.status);
+            if (isPaid) {
+                paidCount++; totalRevenue += amount;
+                if (o.payment_method === 'cash') totalCash += amount; else totalNonCash += amount;
+            }
+            const menus = state.cachedMenuByOrder?.get(o.id) || [];
+            const methodBadge = o.payment_method === 'cash' ? 'success' : o.payment_method === 'qris' ? 'info' : 'warning';
+            const statusBadge = isPaid ? 'success' : o.status === 'cancelled' ? 'danger' : 'warning';
+            return `<tr>
+                <td>${new Date(o.created_at).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', dateStyle: 'short', timeStyle: 'short' })}</td>
+                <td><span class="badge badge-info">${escapeHtml(o.order_type || '-')}</span></td>
+                <td>${escapeHtml(o.customer_name || 'Walk-in')}</td>
+                <td>${menus.join(', ') || 'Tidak ada detail menu'}</td>
+                <td><span class="badge badge-${methodBadge}">${escapeHtml((o.payment_method || '-').toUpperCase())}</span></td>
+                <td><b>${formatRp(amount)}</b></td>
+                <td><span class="badge badge-${statusBadge}">${escapeHtml(o.status || '-')}</span></td>
+                <td class="order-action-btns">
+                    <button onclick="window.viewOrderDetail('${o.id}')" title="Lihat & Cetak"><i class="fas fa-eye"></i></button>
+                    <button onclick="window.editOrder('${o.id}')" title="Ubah status"><i class="fas fa-edit"></i></button>
+                    <button class="delete-btn" onclick="window.deleteOrder('${o.id}')" title="Hapus"><i class="fas fa-trash"></i></button>
+                </td>
+            </tr>`;
+        }).join('');
+
+        const card = (label, val) => `<div class="stat-card"><div class="stat-info"><div class="stat-label">${label}</div><div class="stat-value">${val}</div></div></div>`;
+        const summary = document.getElementById('ordersSummary');
+        if (summary) {
+            summary.innerHTML = `<div class="stats-grid" style="margin-bottom:16px">${card('Total Order', paidCount)}${card('Cash', formatRp(totalCash))}${card('Non-Tunai', formatRp(totalNonCash))}${card('Total Penjualan', formatRp(totalRevenue))}</div>`;
+        }
+    }
+    window.renderFilteredOrders = renderFilteredOrders;
+
+    async function loadOrders(forceReload = false) {
+        const startEl = document.getElementById('orderFilterStart');
+        const endEl = document.getElementById('orderFilterEnd');
+        if (!window._ordersInit) {
+            window._ordersInit = true;
+            if (startEl && endEl) {
+                startEl.value = getTodayJakarta();
+                endEl.value = getTodayJakarta();
+            }
+        }
+
+        // Tampilkan cache langsung secara instan (0 ms latency)
+        if (state.cachedOrders?.length && !forceReload) {
+            renderFilteredOrders();
+        }
+
+        // Fetch pembaruan dari database secara halus di background
         try {
-            let query = supabase.from('orders').select('*').order('created_at', { ascending: false }).limit(500);
-            if (start) query = query.gte('created_at', dayStartISO(start));
-            if (end) query = query.lt('created_at', dayEndExclusiveISO(end));
-
-            const { data: orderData, error } = await query;
-            if (requestId !== orderRequestId) return;
+            const { data: orderData, error } = await supabase.from('orders').select('*').order('created_at', { ascending: false }).limit(500);
             if (error) throw error;
 
             const orders = orderData || [];
-            if (!orders.length) {
-                tableBody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text-light)">Tidak ada data transaksi</td></tr>';
-                document.getElementById('ordersSummary').innerHTML = '';
-                return;
+            state.cachedOrders = orders;
+
+            if (orders.length) {
+                const { data: itemData } = await supabase.from('order_items').select('order_id,qty,products(name)').in('order_id', orders.map(o => o.id));
+                const menuByOrder = new Map();
+                (itemData || []).forEach(i => {
+                    const list = menuByOrder.get(i.order_id) || [];
+                    list.push(`${escapeHtml(i.products?.name || 'Produk')} × ${Number(i.qty || 0)}`);
+                    menuByOrder.set(i.order_id, list);
+                });
+                state.cachedMenuByOrder = menuByOrder;
+            } else {
+                state.cachedMenuByOrder = new Map();
             }
 
-            const { data: itemData, error: itemError } = await supabase.from('order_items').select('order_id,qty,products(name)').in('order_id', orders.map(o => o.id));
-            if (requestId !== orderRequestId) return;
-            if (itemError) throw itemError;
-
-            const menuByOrder = new Map();
-            (itemData || []).forEach(i => {
-                const list = menuByOrder.get(i.order_id) || [];
-                list.push(`${escapeHtml(i.products?.name || 'Produk')} × ${Number(i.qty || 0)}`);
-                menuByOrder.set(i.order_id, list);
-            });
-
-            let paidCount = 0, totalCash = 0, totalNonCash = 0, totalRevenue = 0;
-            tableBody.innerHTML = orders.map(o => {
-                const amount = Number(o.total || 0);
-                const isPaid = PAID_STATUS.includes(o.status);
-                if (isPaid) {
-                    paidCount++; totalRevenue += amount;
-                    if (o.payment_method === 'cash') totalCash += amount; else totalNonCash += amount;
-                }
-                const menus = menuByOrder.get(o.id) || [];
-                const methodBadge = o.payment_method === 'cash' ? 'success' : o.payment_method === 'qris' ? 'info' : 'warning';
-                const statusBadge = isPaid ? 'success' : o.status === 'cancelled' ? 'danger' : 'warning';
-                return `<tr><td>${new Date(o.created_at).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', dateStyle: 'short', timeStyle: 'short' })}</td><td><span class="badge badge-info">${escapeHtml(o.order_type || '-')}</span></td><td>${escapeHtml(o.customer_name || 'Walk-in')}</td><td>${menus.join(', ') || 'Tidak ada detail menu'}</td><td><span class="badge badge-${methodBadge}">${escapeHtml((o.payment_method || '-').toUpperCase())}</span></td><td><b>${formatRp(amount)}</b></td><td><span class="badge badge-${statusBadge}">${escapeHtml(o.status || '-')}</span></td><td class="order-action-btns"><button onclick="window.viewOrderDetail('${o.id}')" title="Lihat & Cetak"><i class="fas fa-eye"></i></button><button onclick="window.editOrder('${o.id}')" title="Ubah status"><i class="fas fa-edit"></i></button><button class="delete-btn" onclick="window.deleteOrder('${o.id}')" title="Hapus"><i class="fas fa-trash"></i></button></td></tr>`;
-            }).join('');
-
-            const card = (label, val) => `<div class="stat-card"><div class="stat-info"><div class="stat-label">${label}</div><div class="stat-value">${val}</div></div></div>`;
-            document.getElementById('ordersSummary').innerHTML = `<div class="stats-grid" style="margin-bottom:16px">${card('Total Order', paidCount)}${card('Cash', formatRp(totalCash))}${card('Non-Tunai', formatRp(totalNonCash))}${card('Total Penjualan', formatRp(totalRevenue))}</div>`;
-        } catch (error) {
-            if (requestId !== orderRequestId) return;
-            console.error(error);
-            tableBody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:#ef4444">Gagal memuat riwayat order.</td></tr>';
-            showToast('Gagal memuat riwayat order: ' + error.message, true);
+            renderFilteredOrders();
+        } catch (err) {
+            console.error(err);
+            showToast('Gagal sinkron data order: ' + err.message, true);
         }
     }
     window.loadOrders = loadOrders;
+
     window.resetOrderFilter = function () {
-        clearTimeout(orderFilterTimer);
-        document.getElementById('orderFilterStart').value = getTodayJakarta();
-        document.getElementById('orderFilterEnd').value = getTodayJakarta();
-        loadOrders();
+        const startEl = document.getElementById('orderFilterStart');
+        const endEl = document.getElementById('orderFilterEnd');
+        if (startEl && endEl) {
+            startEl.value = getTodayJakarta();
+            endEl.value = getTodayJakarta();
+        }
+        renderFilteredOrders();
     };
 
     window.viewOrderDetail = async function (orderId) {
@@ -1251,32 +1343,44 @@
     };
     window.printOrderDetail = function () { printHtml(document.getElementById('orderDetailContent').innerHTML); };
 
-    async function guardOrderChange(orderId, label) {
-        if (state.currentUser?.role !== 'owner') { showToast('Hanya Owner yang boleh ' + label + ' order.', true); return null; }
-        const { data: o } = await supabase.from('orders').select('id,status,order_number').eq('id', orderId).single();
-        if (!o) { showToast('Order tidak ditemukan', true); return null; }
-        if (PAID_STATUS.includes(o.status)) { showToast('Order lunas terkunci karena terhubung ke kas & laporan.', true); return null; }
-        return o;
-    }
+    // Hapus Order (Langsung Bisa Dihapus Tanpa Terkunci)
+    window.deleteOrder = async function (orderId) {
+        const o = state.cachedOrders?.find(x => x.id === orderId);
+        const orderNum = o?.order_number || 'ini';
+        if (!confirm(`Hapus order ${orderNum}? Data order akan dihapus secara permanen.`)) return;
 
-    window.editOrder = async function (orderId) {
-        const order = await guardOrderChange(orderId, 'mengubah');
-        if (!order) return;
-        const newStatus = (prompt(`Ubah status order ${order.order_number}:\n(held / cancelled)`, order.status) || '').trim();
-        if (!['held', 'cancelled'].includes(newStatus) || newStatus === order.status) return;
-        const { error } = await supabase.from('orders').update({ status: newStatus, updated_at: new Date().toISOString() }).eq('id', orderId);
-        if (error) { showToast('Gagal: ' + error.message, true); return; }
-        showToast('Order diupdate!');
-        await loadOrders();
+        try {
+            // Hapus detail items terlebih dahulu (agar terhindar dari foreign key constraint)
+            await supabase.from('order_items').delete().eq('order_id', orderId);
+            const { error } = await supabase.from('orders').delete().eq('id', orderId);
+            if (error) throw error;
+
+            showToast(`Order ${orderNum} berhasil dihapus!`);
+
+            // Update memori lokal & render seketika tanpa loading
+            if (state.cachedOrders) {
+                state.cachedOrders = state.cachedOrders.filter(x => x.id !== orderId);
+                renderFilteredOrders();
+            }
+        } catch (err) {
+            console.error('Gagal menghapus order:', err);
+            showToast('Gagal menghapus order: ' + err.message, true);
+        }
     };
 
-    window.deleteOrder = async function (orderId) {
-        if (!(await guardOrderChange(orderId, 'menghapus'))) return;
-        if (!confirm('Hapus order ini? Data akan hilang permanen.')) return;
-        const { error } = await supabase.from('orders').delete().eq('id', orderId);
+    // Ubah Status Order
+    window.editOrder = async function (orderId) {
+        const o = state.cachedOrders?.find(x => x.id === orderId);
+        if (!o) return;
+        const newStatus = (prompt(`Ubah status order ${o.order_number}:\n(paid / held / cancelled)`, o.status) || '').trim();
+        if (!['paid', 'held', 'cancelled'].includes(newStatus) || newStatus === o.status) return;
+
+        const { error } = await supabase.from('orders').update({ status: newStatus, updated_at: new Date().toISOString() }).eq('id', orderId);
         if (error) { showToast('Gagal: ' + error.message, true); return; }
-        showToast('Order dihapus');
-        await loadOrders();
+
+        showToast('Status order berhasil diubah!');
+        o.status = newStatus;
+        renderFilteredOrders();
     };
 
     /* ---------- Laporan Penjualan (Owner) ---------- */
@@ -1645,9 +1749,22 @@
     document.addEventListener('DOMContentLoaded', function () {
         loadUsersToDropdown();
         window.restoreOwnerSession();
+
+        // Dashboard filter change
         ['dashboardStartDate', 'dashboardEndDate'].forEach(id => document.getElementById(id)?.addEventListener('change', window.applyDashboardFilter));
-        ['orderFilterStart', 'orderFilterEnd'].forEach(id => document.getElementById(id)?.addEventListener('change', () => { clearTimeout(orderFilterTimer); orderFilterTimer = setTimeout(loadOrders, 180); }));
+
+        // Realtime Fast Filter untuk Riwayat Order (0 ms delay pada input & change)
+        ['orderFilterStart', 'orderFilterEnd'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.addEventListener('input', window.renderFilteredOrders);
+                el.addEventListener('change', window.renderFilteredOrders);
+            }
+        });
+
+        // Report filter change
         ['reportStartDate', 'reportEndDate'].forEach(id => document.getElementById(id)?.addEventListener('change', window.applyReportFilter));
+        
         document.getElementById('loginForm')?.addEventListener('submit', function (e) { e.preventDefault(); window.handleLogin(e); });
     });
 })();
