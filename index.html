@@ -63,127 +63,139 @@
                     <div><h2 id="pageTitle">Dashboard</h2><span class="header-date" id="headerDate"></span></div>
                 </div>
                 <div class="header-right">
-                    <div class="live-clock"><i class="far fa-clock"></i><span id="liveClock">00:00:00</span></div>
-                    <div class="user-menu" onclick="window.toggleUserDropdown()">
-                        <div class="user-avatar" id="userAvatar">A</div>
-                        <div class="user-menu-info"><span class="user-name" id="userName">User</span><span class="user-role" id="userRole">Role</span></div>
-                        <i class="fas fa-chevron-down"></i>
-                        <div class="user-dropdown" id="userDropdown"><button onclick="window.handleLogout()"><i class="fas fa-arrow-right-from-bracket"></i> Keluar</button></div>
+                    <div class="live-clock" id="liveClock"></div>
+                    <div class="user-menu">
+                        <button class="user-menu-btn" onclick="window.toggleUserMenu()">
+                            <div class="user-avatar" id="userAvatar">O</div>
+                            <div class="user-menu-info"><div class="user-name" id="userName">Owner</div><div class="user-role" id="userRole">Admin</div></div>
+                            <i class="fas fa-chevron-down"></i>
+                        </button>
+                        <div class="user-dropdown" id="userDropdown">
+                            <div class="dropdown-header"><div class="user-avatar" id="userAvatar2">O</div><div><div class="user-name" id="userName2">Owner</div><div class="user-role" id="userRole2">Admin</div></div></div>
+                            <button class="dropdown-item owner-only" onclick="window.navigate('settings'); window.closeUserMenu();"><i class="fas fa-user-gear"></i> Profil</button>
+                            <button class="dropdown-item logout" onclick="window.logout()"><i class="fas fa-right-from-bracket"></i> Logout</button>
+                        </div>
                     </div>
                 </div>
             </header>
 
             <div class="pages-container">
                 <!-- DASHBOARD -->
-                <div class="page" id="dashboardPage">
-                    <div class="page-header"><h2>Dashboard Penjualan</h2><div class="date-filter"><input type="date" id="dashboardStartDate"><input type="date" id="dashboardEndDate"><button class="btn-primary" onclick="window.applyDashboardFilter()"><i class="fas fa-filter"></i> Filter</button><button class="btn-secondary" onclick="window.resetDashboardFilter()"><i class="fas fa-rotate-right"></i> Reset</button></div></div>
-                    <div class="stats-grid">
-                        <div class="stat-card"><div class="stat-icon"><i class="fas fa-receipt"></i></div><div class="stat-info"><span class="stat-label">Total Transaksi</span><h3 id="statOrders">0</h3></div></div>
-                        <div class="stat-card"><div class="stat-icon"><i class="fas fa-money-bill-wave"></i></div><div class="stat-info"><span class="stat-label">Total Penjualan</span><h3 id="statRevenue">Rp 0</h3></div></div>
-                        <div class="stat-card"><div class="stat-icon"><i class="fas fa-arrow-trend-down"></i></div><div class="stat-info"><span class="stat-label">Pengeluaran</span><h3 id="statExpense">Rp 0</h3></div></div>
-                        <div class="stat-card"><div class="stat-icon"><i class="fas fa-chart-line"></i></div><div class="stat-info"><span class="stat-label">Laba Bersih</span><h3 id="statProfit">Rp 0</h3></div></div>
-                        <div class="stat-card"><div class="stat-icon"><i class="fas fa-cash-register"></i></div><div class="stat-info"><span class="stat-label">Uang di Kasir (Cash)</span><h3 id="statCash">Rp 0</h3></div></div>
-                        <div class="stat-card"><div class="stat-icon"><i class="fas fa-box-archive"></i></div><div class="stat-info"><span class="stat-label">Bahan Menipis</span><h3 id="statLowStock">0</h3></div></div>
+                <div id="page-dashboard" class="page active">
+                    <div style="display:flex;align-items:end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px;padding:14px 16px;background:var(--card-bg);border:1px solid var(--border);border-radius:12px">
+                        <div style="display:flex;align-items:end;gap:10px;flex-wrap:wrap">
+                            <label style="display:grid;gap:5px;font-size:12px;color:var(--text-light);font-weight:600">Dari tanggal<input type="date" id="dashboardStartDate" style="padding:9px 11px;border:1px solid var(--border);border-radius:8px;color:var(--text);background:var(--card-bg)"></label>
+                            <label style="display:grid;gap:5px;font-size:12px;color:var(--text-light);font-weight:600">Sampai tanggal<input type="date" id="dashboardEndDate" style="padding:9px 11px;border:1px solid var(--border);border-radius:8px;color:var(--text);background:var(--card-bg)"></label>
+                            <button class="btn btn-secondary" onclick="window.resetDashboardFilter()">Hari Ini</button>
+                        </div>
+                    </div>
+                    <div class="stats-grid compact">
+                        <div class="stat-card"><div class="stat-icon"><i class="fas fa-shopping-bag"></i></div><div class="stat-info"><div class="stat-label">Total Order</div><div class="stat-value" id="statOrders">0</div></div></div>
+                        <div class="stat-card"><div class="stat-icon"><i class="fas fa-money-bill-wave"></i></div><div class="stat-info"><div class="stat-label">Total Penjualan</div><div class="stat-value" id="statRevenue">Rp 0</div></div></div>
+                        <div class="stat-card"><div class="stat-icon"><i class="fas fa-arrow-trend-down"></i></div><div class="stat-info"><div class="stat-label">Total Pengeluaran</div><div class="stat-value" id="statExpense">Rp 0</div></div></div>
+                        <div class="stat-card"><div class="stat-icon"><i class="fas fa-coins"></i></div><div class="stat-info"><div class="stat-label">Laba Bersih</div><div class="stat-value" id="statProfit">Rp 0</div></div></div>
+                        <div class="stat-card"><div class="stat-icon"><i class="fas fa-vault"></i></div><div class="stat-info"><div class="stat-label">Cash Kasir (Periode)</div><div class="stat-value" id="statCash">Rp 0</div></div></div>
+                        <div class="stat-card"><div class="stat-icon"><i class="fas fa-box"></i></div><div class="stat-info"><div class="stat-label">Stok Menipis</div><div class="stat-value" id="statLowStock">0</div></div></div>
                     </div>
                     <div class="dashboard-grid">
-                        <div class="dash-card"><h3><i class="fas fa-credit-card"></i> Metode Pembayaran</h3><div class="payment-breakdown" id="dashPaymentMethods"></div></div>
-                        <div class="dash-card"><h3><i class="fas fa-trophy"></i> Menu Terlaris</h3><div class="top-products" id="dashTopProducts"></div></div>
+                        <div class="dash-card"><h3><i class="fas fa-chart-pie"></i> <span id="dashboardPaymentTitle">Pembayaran Hari Ini</span></h3><div id="dashPaymentMethods"></div></div>
+                        <div class="dash-card"><h3><i class="fas fa-trophy"></i> Produk Terlaris</h3><div id="dashTopProducts"></div></div>
                     </div>
                 </div>
 
-                <!-- KASIR POS -->
-                <div class="page" id="kasirPage">
+                <!-- KASIR -->
+                <div id="page-kasir" class="page">
                     <div class="kasir-layout">
                         <div class="kasir-left">
-                            <div class="product-search-bar"><i class="fas fa-search"></i><input type="text" id="productSearch" placeholder="Cari menu kopi, makanan..." oninput="window.filterProducts()"></div>
+                            <div class="kasir-top-bar">
+                                <div class="quick-expense-section">
+                                    <div class="section-title"><i class="fas fa-minus-circle"></i> Pengeluaran Kasir Cepat</div>
+                                    <div class="quick-expense-form">
+                                        <select id="quickExpenseSource"><option value="">Sumber Kas</option></select>
+                                        <input type="number" id="quickExpenseAmount" placeholder="Jumlah (Rp)">
+                                        <input type="text" id="quickExpenseDesc" placeholder="Keterangan">
+                                        <button class="btn-expense" onclick="window.quickExpense()"><i class="fas fa-plus"></i></button>
+                                    </div>
+                                </div>
+                                <button class="btn-expense-history" onclick="window.showExpenseHistoryModal()"><i class="fas fa-clock-rotate-left"></i> Riwayat Pengeluaran <span class="expense-count" id="expenseCountBadge">0</span></button>
+                            </div>
+                            <div class="search-bar"><i class="fas fa-search"></i><input type="text" placeholder="Cari menu..." id="searchInput"></div>
                             <div class="categories" id="categoriesContainer"></div>
-                            <div class="products-grid" id="productsContainer"></div>
+                            <div class="products-grid" id="productsGrid"></div>
                         </div>
                         <div class="kasir-right">
-                            <div class="kasir-right-header">
-                                <h3>Pesanan Aktif</h3>
-                                <div style="display:flex;gap:6px">
-                                    <button class="draft-orders-btn" onclick="window.showHoldOrdersModal()"><i class="fas fa-clock-rotate-left"></i> Draft</button>
-                                    <button class="clear-cart-btn" onclick="window.clearCart()"><i class="fas fa-trash-can"></i></button>
+                            <div class="order-header"><div><h3>Order Aktif</h3><p id="orderNumber">#NEW</p></div><button class="btn-hold" onclick="window.showHoldOrders()" title="Draft order"><i class="fas fa-pause"></i></button></div>
+                            <div class="order-type-toggle"><button class="type-btn active" onclick="window.setOrderType('dine_in', this)">Dine In</button><button class="type-btn" onclick="window.setOrderType('takeaway', this)">Take Away</button></div>
+                            <div class="customer-info"><div class="input-group"><label>Nama</label><input type="text" id="customerName" placeholder="Customer"></div><div class="input-group"><label>Meja</label><input type="text" id="tableNumber" placeholder="Table 1"></div></div>
+                            <div class="order-list-header">Item Order</div>
+                            <div class="order-list" id="orderList"><div class="empty-order"><i class="fas fa-shopping-basket"></i><p>Belum ada item</p></div></div>
+                            <div class="discount-inline-section">
+                                <div class="discount-inline-row">
+                                    <label style="font-size:11px;font-weight:700;color:var(--text-light);text-transform:uppercase;min-width:60px">Diskon</label>
+                                    <div class="discount-inline-controls">
+                                        <select id="discountTypeInline" onchange="window.applyInlineDiscount()"><option value="none">Tidak ada</option><option value="percent">Persen (%)</option><option value="fixed">Nominal (Rp)</option></select>
+                                        <input type="number" id="discountValueInline" placeholder="0" min="0" oninput="window.applyInlineDiscount()">
+                                    </div>
                                 </div>
                             </div>
-                            <div class="order-type-switch">
-                                <button class="type-btn active" data-type="dine_in" onclick="window.setOrderType('dine_in')"><i class="fas fa-utensils"></i> Dine In</button>
-                                <button class="type-btn" data-type="take_away" onclick="window.setOrderType('take_away')"><i class="fas fa-bag-shopping"></i> Take Away</button>
-                            </div>
-                            <div class="customer-input-group">
-                                <input type="text" id="customerName" placeholder="Nama Pelanggan (opsional)">
-                                <input type="text" id="tableNumber" placeholder="No Meja">
-                            </div>
-                            <div class="cart-items" id="cartContainer"></div>
-                            <div class="kasir-summary-card">
-                                <div class="kasir-expense-card">
-                                    <div class="exp-header"><div class="exp-title"><i class="fas fa-money-bill-transfer"></i><span>Pengeluaran Kasir</span></div><button class="exp-history-btn" onclick="window.showKasirExpenseHistory()"><i class="fas fa-clock-rotate-left"></i> Riwayat</button></div>
-                                    <div class="exp-inputs"><input type="number" id="quickExpenseAmount" placeholder="Nominal Rp"><input type="text" id="quickExpenseDesc" placeholder="Keterangan (misal: Beli es)"><button onclick="window.addKasirExpense()"><i class="fas fa-plus"></i></button></div>
-                                </div>
-                                <div class="discount-inline">
-                                    <span class="discount-label"><i class="fas fa-tag"></i> Diskon:</span>
-                                    <select id="discountTypeInline" onchange="window.setInlineDiscount()"><option value="none">Tidak ada</option><option value="percent">Persen (%)</option><option value="fixed">Nominal (Rp)</option></select>
-                                    <input type="number" id="discountValueInline" placeholder="0" min="0" oninput="window.setInlineDiscount()">
-                                </div>
-                                <div class="payment-details"><div class="payment-row"><span>Subtotal</span><span id="subtotal">Rp 0</span></div><div class="payment-row discount-row" id="discountRow" style="display:none"><span>Diskon</span><span id="discountAmount">- Rp 0</span></div><div class="payment-row total"><span>Total</span><span id="total">Rp 0</span></div></div>
-                                <button class="place-order-btn" id="placeOrderBtn" onclick="window.showPaymentModal()" disabled><span>Bayar</span><span id="btnTotal">Rp 0</span><i class="fas fa-arrow-right"></i></button>
-                                <button class="daily-report-btn" onclick="window.showDailyReport()"><i class="fas fa-chart-bar"></i> Laporan Hari Ini</button>
-                            </div>
+                            <div class="payment-details"><div class="payment-row"><span>Subtotal</span><span id="subtotal">Rp 0</span></div><div class="payment-row discount-row" id="discountRow" style="display:none"><span>Diskon</span><span id="discountAmount">- Rp 0</span></div><div class="payment-row total"><span>Total</span><span id="total">Rp 0</span></div></div>
+                            <button class="place-order-btn" id="placeOrderBtn" onclick="window.showPaymentModal()" disabled><span>Bayar</span><span id="btnTotal">Rp 0</span><i class="fas fa-arrow-right"></i></button>
+                            <button class="daily-report-btn" onclick="window.showDailyReport()"><i class="fas fa-chart-bar"></i> Laporan Hari Ini</button>
                         </div>
                     </div>
                 </div>
 
                 <!-- RIWAYAT ORDER -->
-                <div class="page" id="ordersPage">
-                    <div class="page-header"><h2>Riwayat Order</h2><div class="date-filter"><input type="date" id="orderFilterStart"><input type="date" id="orderFilterEnd"><button class="btn-primary" onclick="window.filterOrders()"><i class="fas fa-filter"></i> Filter</button><button class="btn-secondary" onclick="window.resetOrderFilter()"><i class="fas fa-rotate-right"></i> Hari Ini</button></div></div>
-                    <div class="orders-summary"><div class="stats-grid compact" id="orderSummaryCards"></div></div>
-                    <div class="table-container"><table class="data-table"><thead><tr><th>No. Order</th><th>Waktu</th><th>Pelanggan</th><th>Menu</th><th>Total</th><th>Status</th><th>Aksi</th></tr></thead><tbody id="ordersTableBody"></tbody></table></div>
+                <div id="page-orders" class="page">
+                    <div class="page-header"><h2>Riwayat Order</h2><div class="filter-group"><div class="date-range-filter"><i class="fas fa-calendar-days"></i><input type="date" id="orderFilterStart"><span>s/d</span><input type="date" id="orderFilterEnd"></div><button class="btn-secondary" onclick="window.resetOrderFilter()"><i class="fas fa-rotate-right"></i> Hari Ini</button></div></div>
+                    <div class="orders-summary" id="ordersSummary"></div>
+                    <div class="table-container"><table class="data-table"><thead><tr><th>Tanggal</th><th>Tipe</th><th>Customer</th><th>Menu</th><th>Metode</th><th>Total</th><th>Status</th><th>Aksi</th></tr></thead><tbody id="ordersTableBody"></tbody></table></div>
                 </div>
 
                 <!-- KAS & BANK -->
-                <div class="page" id="cashPage">
-                    <div class="page-header"><h2>Kas & Bank</h2><div style="display:flex;gap:8px"><button class="btn-primary" onclick="window.showAddManualMutationModal()"><i class="fas fa-plus"></i> Tambah Mutasi</button><button class="btn-primary" onclick="window.showTransferModal()"><i class="fas fa-arrow-right-arrow-left"></i> Transfer</button></div></div>
+                <div id="page-cash" class="page">
+                    <div class="page-header"><h2>Kas & Bank</h2><div class="filter-group"><button class="btn-primary" onclick="window.showAddMutationModal()"><i class="fas fa-plus"></i> Tambah Mutasi</button><button class="btn-secondary" onclick="window.showTransferModal()"><i class="fas fa-arrow-right-arrow-left"></i> Transfer</button></div></div>
                     <div class="cash-sources-grid compact" id="cashSourcesGrid"></div>
-                    <div class="cash-page-card" style="margin-top:20px;">
-                        <div class="card-header-actions"><h3>Riwayat Mutasi Kas</h3><div class="date-filter"><input type="date" id="cashFilterStart"><input type="date" id="cashFilterEnd"><button class="btn-primary" onclick="window.applyCashFilter()"><i class="fas fa-filter"></i> Filter</button><button class="btn-secondary" onclick="window.resetCashFilter()"><i class="fas fa-rotate-right"></i> Reset</button></div></div>
-                        <div class="table-container"><table class="data-table"><thead><tr><th>Tanggal</th><th>Sumber</th><th>Tipe</th><th>Jumlah</th><th>Keterangan</th><th>Aksi</th></tr></thead><tbody id="cashMutationsBody"></tbody></table></div>
-                    </div>
+                    <div class="page-section"><h3><i class="fas fa-clock-rotate-left"></i> Riwayat Mutasi Kas</h3><div class="filter-group" style="margin-bottom:12px"><div class="date-range-filter"><i class="fas fa-calendar-days"></i><input type="date" id="cashFilterStart"><span>s/d</span><input type="date" id="cashFilterEnd"></div><button class="btn-secondary" onclick="window.loadCash()"><i class="fas fa-filter"></i> Filter</button></div><div class="table-container"><table class="data-table"><thead><tr><th>Tanggal</th><th>Sumber</th><th>Tipe</th><th>Deskripsi</th><th>Jumlah</th><th>Aksi</th></tr></thead><tbody id="cashMutationsBody"></tbody></table></div></div>
                 </div>
 
                 <!-- LAPORAN -->
-                <div class="page" id="reportsPage">
-                    <div class="page-header"><h2>Laporan Penjualan</h2><div class="date-filter"><input type="date" id="reportStartDate"><input type="date" id="reportEndDate"><button class="btn-primary" onclick="window.applyReportFilter()"><i class="fas fa-filter"></i> Filter</button><button class="btn-secondary" onclick="window.resetReportFilter()"><i class="fas fa-rotate-right"></i> Reset</button></div></div>
+                <div id="page-reports" class="page">
+                    <div class="page-header"><h2>Laporan</h2><div class="filter-group"><div class="date-range-filter"><i class="fas fa-calendar-days"></i><input type="date" id="reportStartDate"><span>s/d</span><input type="date" id="reportEndDate"></div><button class="btn-secondary" onclick="window.setReportPreset('today')">Hari Ini</button><button class="btn-secondary" onclick="window.setReportPreset('week')">7 Hari</button><button class="btn-secondary" onclick="window.setReportPreset('month')">Bulan</button></div></div>
                     <div class="stats-grid compact" id="reportStats"></div>
-                    <div class="table-container"><table class="data-table"><thead><tr><th>Tanggal</th><th>Total Order</th><th>Pendapatan</th><th>Diskon</th><th>Subtotal</th><th>Aksi</th></tr></thead><tbody id="reportTableBody"></tbody></table></div>
+                    <div class="table-container"><table class="data-table"><thead><tr><th>Tanggal</th><th>Order</th><th>Cash</th><th>QRIS</th><th>Debit</th><th>Total</th></tr></thead><tbody id="reportTableBody"></tbody></table></div>
                 </div>
 
                 <!-- PENGATURAN -->
-                <div class="page" id="settingsPage">
-                    <div class="settings-grid">
-                        <div class="settings-card"><h3><i class="fas fa-user-gear"></i> Profil Pengguna</h3><div class="profile-photo-wrapper"><div class="profile-photo-preview" id="profilePhotoDisplay"><i class="fas fa-user"></i></div><button class="upload-photo-btn" onclick="window.openPhotoUploadModal()"><i class="fas fa-camera"></i> Ganti Foto</button></div><div class="input-group"><label>Nama Lengkap</label><input type="text" id="profileFullName"></div><div class="input-group"><label>Password Baru</label><input type="password" id="profilePassword" placeholder="Kosongkan jika tidak diubah"></div><button class="save-settings-btn" onclick="window.saveProfile()"><i class="fas fa-save"></i> Simpan Profil</button></div>
-                        <div class="settings-card"><h3><i class="fas fa-store"></i> Info Toko</h3><div class="input-group"><label>Nama Toko</label><input type="text" id="settingStoreName"></div><div class="input-group"><label>Alamat</label><input type="text" id="settingStoreAddress"></div><div class="input-group"><label>Telepon</label><input type="text" id="settingStorePhone"></div><div class="input-group"><label>Footer Struk</label><input type="text" id="settingReceiptFooter"></div><button class="save-settings-btn" onclick="window.saveStoreInfo()"><i class="fas fa-save"></i> Simpan Info</button></div>
-                        <div class="settings-card"><h3><i class="fas fa-percent"></i> Pajak (PB1)</h3><div class="input-group"><label>Status</label><select id="settingTaxEnabled"><option value="false">Non-aktif</option><option value="true">Aktif</option></select></div><div class="input-group"><label>Persentase (%)</label><input type="number" id="settingTaxRate" placeholder="10"></div><button class="save-settings-btn" onclick="window.saveTaxSetting()"><i class="fas fa-save"></i> Simpan Pajak</button></div>
-                        <div class="settings-card full-width"><h3><i class="fas fa-users"></i> Manajemen User</h3><div style="margin-bottom:12px"><button class="btn-primary" onclick="window.openUserModal()"><i class="fas fa-user-plus"></i> Tambah User</button></div><div class="table-container"><table class="data-table"><thead><tr><th>Nama</th><th>Username</th><th>Role</th><th>Aksi</th></tr></thead><tbody id="userTableBody"></tbody></table></div></div>
-                    </div>
+                <div id="page-settings" class="page">
+                    <div class="tabs"><button class="tab active" onclick="window.switchSettingsTab('profile', this)"><i class="fas fa-user"></i> Profil</button><button class="tab" onclick="window.switchSettingsTab('users', this)"><i class="fas fa-users"></i> User</button><button class="tab" onclick="window.switchSettingsTab('store', this)"><i class="fas fa-store"></i> Toko</button><button class="tab" onclick="window.switchSettingsTab('tax', this)"><i class="fas fa-percent"></i> Pajak</button></div>
+                    <div id="settingsContent"></div>
                 </div>
             </div>
         </main>
     </div>
 
-    <!-- MODAL-MODAL -->
-    <div class="modal-overlay" id="productModal"><div class="modal"><div class="modal-header"><h2 id="modalProductName">Pilih Varian & Addon</h2><button class="modal-close" onclick="window.closeModal('productModal')"><i class="fas fa-xmark"></i></button></div><div class="modal-body"><div class="option-group" id="suhuGroup"><label>Suhu</label><div class="option-chips" id="suhuVariants"></div></div><div class="option-group" id="ukuranGroup"><label>Ukuran</label><div class="option-chips" id="ukuranVariants"></div></div><div class="option-group"><label>Addon / Topping Tambahan</label><div class="addon-list" id="addonsList"></div></div><div class="input-group"><label>Catatan Tambahan</label><input type="text" id="modalNotes" placeholder="Contoh: Less sugar, extra ice"></div><div class="quantity-control"><label>Jumlah</label><div class="qty-btn-group"><button onclick="window.changeModalQty(-1)"><i class="fas fa-minus"></i></button><span id="modalQty">1</span><button onclick="window.changeModalQty(1)"><i class="fas fa-plus"></i></button></div></div></div><div class="modal-footer"><button class="btn-secondary" onclick="window.closeModal('productModal')">Batal</button><button class="add-to-cart-btn" onclick="window.confirmAddToCart()"><i class="fas fa-cart-plus"></i> Tambah ke Pesanan</button></div></div></div>
+    <!-- ========== MODAL ========== -->
+    <div class="modal-overlay" id="productModal"><div class="modal"><div class="modal-header"><h2 id="modalProductName">Product</h2><button class="modal-close" onclick="window.closeModal('productModal')"><i class="fas fa-xmark"></i></button></div><div style="padding:24px;overflow-y:auto;max-height:75vh"><div class="variant-section"><h4><i class="fas fa-temperature-half"></i> Suhu</h4><div class="variant-options" id="suhuVariants"></div></div><div class="variant-section"><h4><i class="fas fa-ruler"></i> Ukuran</h4><div class="variant-options" id="ukuranVariants"></div></div><div class="variant-section"><h4><i class="fas fa-circle-plus"></i> Add-ons</h4><div id="addonsList"></div></div><div class="variant-section"><h4><i class="fas fa-note-sticky"></i> Catatan</h4><textarea class="notes-input" id="modalNotes"></textarea></div><div class="qty-selector"><button onclick="window.changeQty(-1)"><i class="fas fa-minus"></i></button><span id="modalQty">1</span><button onclick="window.changeQty(1)"><i class="fas fa-plus"></i></button></div><button class="add-to-cart-btn" onclick="window.addToCart()">Tambah - <span id="modalTotal">Rp 0</span></button></div></div></div>
 
-    <div class="modal-overlay" id="paymentModal"><div class="modal"><div class="modal-header"><h2>Pembayaran</h2><button class="modal-close" onclick="window.closeModal('paymentModal')"><i class="fas fa-xmark"></i></button></div><div style="padding:24px"><div class="payment-amount-box"><span class="amount-label">Total Tagihan</span><span class="amount-value" id="paymentTotal">Rp 0</span></div><div class="payment-methods"><button class="method-btn active" data-method="cash" onclick="window.setPaymentMethod('cash')"><i class="fas fa-money-bill-wave"></i> Cash</button><button class="method-btn" data-method="qris" onclick="window.setPaymentMethod('qris')"><i class="fas fa-qrcode"></i> QRIS</button><button class="method-btn" data-method="debit" onclick="window.setPaymentMethod('debit')"><i class="fas fa-credit-card"></i> Debit</button></div><div class="cash-input-section" id="cashInputSection"><div class="input-group"><label>Uang Diterima</label><input type="number" id="cashReceived" placeholder="0" oninput="window.calcChange()"><div class="quick-cash"><button onclick="window.setExactCash()">Uang Pas</button><button onclick="window.setQuickCash(20000)">20.000</button><button onclick="window.setQuickCash(50000)">50.000</button><button onclick="window.setQuickCash(100000)">100.000</button></div></div><div class="payment-amount-box change-box"><span class="amount-label">Kembalian</span><span class="change-value" id="changeAmount">Rp 0</span></div></div><button class="pay-confirm-btn" onclick="window.processPayment()"><i class="fas fa-check"></i> Selesaikan Transaksi</button></div></div></div>
+    <div class="modal-overlay" id="paymentModal"><div class="modal payment-modal"><div class="modal-header"><h2>Pembayaran</h2><button class="modal-close" onclick="window.closeModal('paymentModal')"><i class="fas fa-xmark"></i></button></div><div style="padding:24px"><div class="payment-amount"><div class="amount-label">Total</div><div class="amount-value" id="paymentTotal">Rp 0</div></div><div class="payment-methods"><button class="method-btn active" onclick="window.selectPaymentMethod('cash', this)"><i class="fas fa-money-bill-wave"></i>Cash</button><button class="method-btn" onclick="window.selectPaymentMethod('qris', this)"><i class="fas fa-qrcode"></i>QRIS</button><button class="method-btn" onclick="window.selectPaymentMethod('debit', this)"><i class="fas fa-credit-card"></i>Debit</button></div><div class="cash-input-section" id="cashInputSection"><div class="input-group"><label>Uang Diterima</label><input type="number" id="cashReceived" oninput="window.calculateChange()"></div><div class="quick-cash"><button onclick="window.setQuickCash(50000)">50K</button><button onclick="window.setQuickCash(100000)">100K</button><button onclick="window.setQuickCash(150000)">150K</button><button onclick="window.setQuickCash(200000)">200K</button><button onclick="window.setQuickCash(500000)">500K</button><button onclick="window.setExactCash()">Uang Pas</button></div><div class="change-display"><div class="change-label">Kembalian</div><div class="change-value" id="changeAmount">Rp 0</div></div></div><button class="confirm-payment-btn" onclick="window.processPayment()">Konfirmasi</button></div></div></div>
 
-    <div class="modal-overlay" id="receiptModal"><div class="modal receipt-modal"><div class="modal-header"><h2>Struk Pembayaran</h2><button class="modal-close" onclick="window.closeModal('receiptModal')"><i class="fas fa-xmark"></i></button></div><div class="receipt-content" id="receiptContent"></div><button class="print-btn" onclick="window.printReceipt()"><i class="fas fa-print"></i> Cetak Struk</button></div></div>
+    <div class="modal-overlay" id="expenseHistoryModal"><div class="modal" style="max-width:500px"><div class="modal-header"><h2>Riwayat Pengeluaran</h2><button class="modal-close" onclick="window.closeModal('expenseHistoryModal')"><i class="fas fa-xmark"></i></button></div><div id="expenseHistoryContent" style="padding:24px;overflow-y:auto;max-height:75vh"></div></div></div>
+    <div class="modal-overlay" id="editExpenseModal"><div class="modal"><div class="modal-header"><h2>Edit Pengeluaran</h2><button class="modal-close" onclick="window.closeModal('editExpenseModal')"><i class="fas fa-xmark"></i></button></div><div style="padding:24px"><input type="hidden" id="editExpenseId"><div class="input-group"><label>Keterangan</label><input type="text" id="editExpenseCategory"></div><div class="input-group"><label>Jumlah</label><input type="number" id="editExpenseAmount"></div><button class="add-to-cart-btn" onclick="window.saveEditedExpense()">Simpan</button></div></div></div>
 
-    <div class="modal-overlay" id="holdOrdersModal"><div class="modal"><div class="modal-header"><h2>Draft Order Tersimpan</h2><button class="modal-close" onclick="window.closeModal('holdOrdersModal')"><i class="fas fa-xmark"></i></button></div><div class="modal-body"><div class="hold-orders-list" id="holdOrdersList"></div></div><div class="modal-footer"><button class="btn-secondary" onclick="window.closeModal('holdOrdersModal')">Tutup</button><button class="add-to-cart-btn" onclick="window.saveCurrentHeldOrder()"><i class="fas fa-floppy-disk"></i> Simpan Order Aktif Ini</button></div></div></div>
+    <div class="modal-overlay" id="holdOrdersModal">
+        <div class="modal" style="max-width:640px">
+            <div class="modal-header"><h2>Draft Order</h2><button class="modal-close" onclick="window.closeModal('holdOrdersModal')"><i class="fas fa-xmark"></i></button></div>
+            <div style="padding:20px;overflow-y:auto;max-height:75vh">
+                <p style="color:var(--text-light);margin-bottom:12px">Draft hanya tersimpan di perangkat/browser ini dan tidak ikut masuk ke laporan sampai pembayaran berhasil.</p>
+                <button class="btn-primary" style="margin-bottom:12px" onclick="window.saveCurrentHeldOrder()"><i class="fas fa-pause"></i> Simpan order aktif</button>
+                <div id="holdOrdersList"></div>
+            </div>
+        </div>
+    </div>
 
-    <div class="modal-overlay" id="dailyReportModal"><div class="modal report-modal"><div class="modal-header"><h2>Laporan Kasir Hari Ini</h2><button class="modal-close" onclick="window.closeModal('dailyReportModal')"><i class="fas fa-xmark"></i></button></div><div class="receipt-content" id="dailyReportContent"></div><button class="print-btn" onclick="window.printDailyReport()"><i class="fas fa-print"></i> Cetak Laporan</button></div></div>
-
-    <div class="modal-overlay" id="kasirExpenseHistoryModal"><div class="modal"><div class="modal-header"><h2>Riwayat Pengeluaran Kasir Hari Ini</h2><button class="modal-close" onclick="window.closeModal('kasirExpenseHistoryModal')"><i class="fas fa-xmark"></i></button></div><div class="modal-body" id="kasirExpenseHistoryContent" style="padding:16px;max-height:400px;overflow-y:auto"></div><div class="modal-footer"><button class="btn-secondary" onclick="window.closeModal('kasirExpenseHistoryModal')">Tutup</button></div></div></div>
-    <div class="modal-overlay" id="editKasirExpenseModal"><div class="modal"><div class="modal-header"><h2>Edit Pengeluaran Kasir</h2><button class="modal-close" onclick="window.closeModal('editKasirExpenseModal')"><i class="fas fa-xmark"></i></button></div><div style="padding:24px"><input type="hidden" id="editKasirExpenseId"><div class="input-group"><label>Kategori</label><input type="text" id="editKasirExpenseCategory"></div><div class="input-group"><label>Jumlah (Rp)</label><input type="number" id="editKasirExpenseAmount"></div><button class="add-to-cart-btn" onclick="window.saveEditedKasirExpense()">Simpan</button></div></div></div>
+    <div class="modal-overlay" id="receiptModal"><div class="modal receipt-modal"><div class="modal-header"><h2>Struk</h2><button class="modal-close" onclick="window.closeModal('receiptModal')"><i class="fas fa-xmark"></i></button></div><div class="receipt-content" id="receiptContent"></div><button class="print-btn" onclick="window.printReceipt()"><i class="fas fa-print"></i> Print</button></div></div>
+    <div class="modal-overlay" id="dailyReportModal"><div class="modal report-modal"><div class="modal-header"><h2>Laporan Hari Ini</h2><button class="modal-close" onclick="window.closeModal('dailyReportModal')"><i class="fas fa-xmark"></i></button></div><div id="dailyReportContent" style="padding:24px;overflow-y:auto;max-height:75vh"></div></div></div>
     <div class="modal-overlay" id="orderDetailModal"><div class="modal receipt-modal"><div class="modal-header"><h2>Detail Order</h2><button class="modal-close" onclick="window.closeModal('orderDetailModal')"><i class="fas fa-xmark"></i></button></div><div class="receipt-content" id="orderDetailContent"></div><button class="print-btn" onclick="window.printOrderDetail()"><i class="fas fa-print"></i> Cetak</button></div></div>
 
     <div class="modal-overlay" id="transferModal"><div class="modal"><div class="modal-header"><h2>Transfer</h2><button class="modal-close" onclick="window.closeModal('transferModal')"><i class="fas fa-xmark"></i></button></div><div style="padding:24px"><div class="input-group"><label>Dari</label><select id="transferFrom"></select></div><div class="input-group"><label>Ke</label><select id="transferTo"></select></div><div class="input-group"><label>Jumlah</label><input type="number" id="transferAmount"></div><div class="input-group"><label>Keterangan</label><input type="text" id="transferDesc"></div><button class="add-to-cart-btn" onclick="window.processTransfer()">Transfer</button></div></div></div>
@@ -192,7 +204,7 @@
     <div class="modal-overlay" id="editMutationModal"><div class="modal"><div class="modal-header"><h2>Edit Mutasi</h2><button class="modal-close" onclick="window.closeModal('editMutationModal')"><i class="fas fa-xmark"></i></button></div><div style="padding:24px"><input type="hidden" id="editMutationId"><div class="input-group"><label>Jumlah</label><input type="number" id="editMutationAmount"></div><div class="input-group"><label>Deskripsi</label><input type="text" id="editMutationDesc"></div><button class="add-to-cart-btn" onclick="window.saveEditedMutation()">Simpan</button></div></div></div>
     <div class="modal-overlay" id="addMutationModal"><div class="modal"><div class="modal-header"><h2>Tambah Mutasi</h2><button class="modal-close" onclick="window.closeModal('addMutationModal')"><i class="fas fa-xmark"></i></button></div><div style="padding:24px"><div class="input-group"><label>Sumber Kas</label><select id="addMutationSource"></select></div><div class="input-group"><label>Tipe</label><select id="addMutationType"><option value="in">Pemasukan (In)</option><option value="out">Pengeluaran (Out)</option></select></div><div class="input-group"><label>Jumlah (Rp)</label><input type="number" id="addMutationAmount" placeholder="0"></div><div class="input-group"><label>Deskripsi</label><input type="text" id="addMutationDesc" placeholder="Keterangan"></div><button class="add-to-cart-btn" onclick="window.saveManualMutation()">Simpan</button></div></div></div>
 
-    <div class="modal-overlay" id="userFormModal"><div class="modal"><div class="modal-header"><h2>User</h2><button class="modal-close" onclick="window.closeModal('userFormModal')"><i class="fas fa-xmark"></i></button></div><div style="padding:24px"><input type="hidden" id="editUserId"><div class="input-group"><label>Nama</label><input type="text" id="editUserFullName"></div><div class="input-group"><label>Username</label><input type="text" id="editUserUsername"></div><div class="input-group"><label>Password</label><input type="password" id="editUserPassword"></div><div class="input-group"><label>Role</label><select id="editUserRole"><option value="owner">Owner</option><option value="kasir">Kasir</option></select></div><button class="add-to-cart-btn" onclick="window.saveUser()">Simpan</button></div></div></div>
+    <div class="modal-overlay" id="userFormModal"><div class="modal"><div class="modal-header"><h2 id="userFormTitle">User</h2><button class="modal-close" onclick="window.closeModal('userFormModal')"><i class="fas fa-xmark"></i></button></div><div style="padding:24px"><input type="hidden" id="editUserId"><div class="input-group"><label>Nama</label><input type="text" id="editUserFullName"></div><div class="input-group"><label>Username</label><input type="text" id="editUserUsername"></div><div class="input-group"><label>Password</label><input type="password" id="editUserPassword"></div><div class="input-group"><label>Role</label><select id="editUserRole"><option value="owner">Owner</option><option value="kasir">Kasir</option></select></div><button class="add-to-cart-btn" onclick="window.saveUser()">Simpan</button></div></div></div>
     <div class="modal-overlay" id="photoUploadModal"><div class="modal"><div class="modal-header"><h2>Upload Foto</h2><button class="modal-close" onclick="window.closeModal('photoUploadModal')"><i class="fas fa-xmark"></i></button></div><div class="photo-upload-section" style="padding:24px"><div class="profile-photo-preview" id="photoUploadPreview"><i class="fas fa-user"></i></div><input type="file" id="photoFileInput" accept="image/*" onchange="window.handlePhotoUpload(event)" style="margin-top:12px"><p style="font-size:12px;color:var(--text-light);margin-top:8px">Max 2MB</p></div><button class="add-to-cart-btn" onclick="window.saveUploadedPhoto()" style="margin:0 24px 24px;width:calc(100% - 48px)">Simpan</button></div></div>
 
     <div class="toast" id="toast"></div>
