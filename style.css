@@ -323,3 +323,18 @@ body.role-kasir .order-action-btns button:nth-child(n+2) { display:none; }
     .date-range-filter { flex-wrap:wrap; }
 }
 body.role-kasir .owner-only { display:none !important; }
+
+/* ===== DIALOG KONFIRMASI & TOAST ===== */
+.toast { display:flex; align-items:center; gap:10px; }
+.toast i { font-size:18px; flex-shrink:0; }
+.confirm-overlay { z-index:10001; }
+.confirm-modal { max-width:400px; }
+.confirm-body { padding:28px 24px 22px; text-align:center; }
+.confirm-icon { width:56px; height:56px; border-radius:50%; background:var(--primary-light); color:var(--primary-dark); display:flex; align-items:center; justify-content:center; font-size:24px; margin:0 auto 14px; }
+.confirm-icon.danger { background:#fee2e2; color:#dc2626; }
+.confirm-body h3 { font-size:18px; font-weight:800; margin-bottom:8px; }
+.confirm-msg { font-size:14px; color:var(--text-light); line-height:1.6; margin-bottom:22px; }
+.confirm-actions { display:flex; gap:10px; }
+.confirm-actions button { flex:1; justify-content:center; padding:12px; font-size:14px; }
+.btn-primary.btn-danger { background:#ef4444; }
+.btn-primary.btn-danger:hover { background:#dc2626; }
