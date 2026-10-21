@@ -86,10 +86,24 @@
     }
     function showToast(msg, err = false) {
         const t = document.getElementById('toast');
-        t.innerText = msg;
+        t.innerHTML = `<i class="fas ${err ? 'fa-circle-xmark' : 'fa-circle-check'}"></i><span>${escapeHtml(msg)}</span>`;
         t.className = 'toast show' + (err ? ' error' : '');
         clearTimeout(toastTimer);
-        toastTimer = setTimeout(() => { t.className = 'toast'; }, 3000);
+        toastTimer = setTimeout(() => { t.className = 'toast'; }, err ? 5000 : 3000);
+    }
+    // Pengganti confirm() bawaan browser
+    function confirmDialog(message, { title = 'Konfirmasi', okText = 'Ya, Lanjutkan', cancelText = 'Batal', danger = false, html = false } = {}) {
+        return new Promise(resolve => {
+            const ov = document.createElement('div');
+            ov.className = 'modal-overlay active confirm-overlay';
+            ov.innerHTML = `<div class="modal confirm-modal"><div class="confirm-body"><div class="confirm-icon ${danger ? 'danger' : ''}"><i class="fas ${danger ? 'fa-triangle-exclamation' : 'fa-circle-question'}"></i></div><h3>${escapeHtml(title)}</h3><div class="confirm-msg">${html ? message : escapeHtml(message).replace(/\n/g, '<br>')}</div><div class="confirm-actions"><button class="btn-secondary" data-r="0">${escapeHtml(cancelText)}</button><button class="btn-primary ${danger ? 'btn-danger' : ''}" data-r="1">${escapeHtml(okText)}</button></div></div></div>`;
+            const onKey = e => { if (e.key === 'Escape') done(false); };
+            const done = v => { document.removeEventListener('keydown', onKey); ov.remove(); resolve(v); };
+            ov.addEventListener('click', e => { const b = e.target.closest('button[data-r]'); if (b) done(b.dataset.r === '1'); else if (e.target === ov) done(false); });
+            document.addEventListener('keydown', onKey);
+            document.body.appendChild(ov);
+            ov.querySelector('[data-r="1"]').focus();
+        });
     }
     function setAvatar(el, user) {
         if (!el) return;
@@ -381,7 +395,7 @@
         window.showExpenseHistoryModal();
     };
     window.deleteExpense = async function (id) {
-        if (!confirm('Hapus pengeluaran ini? Saldo akan dikembalikan.')) return;
+        if (!(await confirmDialog('Hapus pengeluaran ini? Saldo akan dikembalikan.', { title: 'Hapus pengeluaran', okText: 'Hapus', danger: true }))) return;
         const { data, error } = await supabase.rpc('delete_expense', { p_expense_id: id });
         if (error || !data?.success) { showToast('Gagal: ' + (error?.message || data?.message || 'Unknown'), true); return; }
         showToast('Pengeluaran dihapus!');
@@ -667,9 +681,9 @@
         showToast('Order disimpan sebagai draft di perangkat ini.');
         return true;
     };
-    window.restoreHeldOrder = function (id) {
+    window.restoreHeldOrder = async function (id) {
         if (state.cart.length) {
-            if (!confirm('Order aktif akan disimpan otomatis sebagai draft, lalu draft ini dilanjutkan. Lanjut?')) return;
+            if (!(await confirmDialog('Order aktif akan disimpan otomatis sebagai draft, lalu draft ini dilanjutkan.', { title: 'Lanjutkan draft', okText: 'Lanjutkan' }))) return;
             if (!window.saveCurrentHeldOrder()) return;
         }
         const orders = getHeldOrders();
@@ -690,8 +704,8 @@
         window.closeModal('holdOrdersModal');
         showToast('Draft order dilanjutkan.');
     };
-    window.deleteHeldOrder = function (id) {
-        if (!confirm('Hapus draft order ini?')) return;
+    window.deleteHeldOrder = async function (id) {
+        if (!(await confirmDialog('Draft order ini akan dihapus.', { title: 'Hapus draft', okText: 'Hapus', danger: true }))) return;
         try { saveHeldOrders(getHeldOrders().filter(o => o.id !== id)); }
         catch (error) { showToast('Draft tidak dapat dihapus dari penyimpanan browser.', true); return; }
         renderHeldOrders();
@@ -756,7 +770,11 @@
         const notes = document.getElementById('cashierCloseNotes')?.value.trim() || '';
         if (system <= 0 && physicalCash <= 0) { showToast('Tidak ada saldo Cash Kasir untuk ditutup.', true); return; }
         if (diff !== 0 && !notes) { showToast('Ada selisih ' + formatRp(diff) + '. Isi catatan selisih dulu.', true); return; }
-        if (!window.confirm('Cash seharusnya ' + formatRp(system) + ', fisik ' + formatRp(physicalCash) + ', selisih ' + formatRp(diff) + '.\nSetor ke Cash Umum dan mulai shift baru dari Rp 0?')) return;
+        const row = (l, v, c) => `<div style="display:flex;justify-content:space-between;padding:6px 0"><span>${l}</span><b style="${c ? 'color:' + c : ''}">${v}</b></div>`;
+        const okClose = await confirmDialog(
+            `<div style="text-align:left;background:var(--bg);padding:10px 14px;border-radius:10px;margin-bottom:8px">${row('Cash seharusnya', formatRp(system))}${row('Uang fisik', formatRp(physicalCash))}${row('Selisih', formatRp(diff), diff === 0 ? 'var(--primary-dark)' : '#ef4444')}</div>Uang fisik disetor ke Cash Umum dan shift baru mulai dari Rp 0.`,
+            { title: 'Tutup kasir sekarang?', okText: 'Tutup Kasir', html: true });
+        if (!okClose) return;
         const button = panel.querySelector('button');
         button.disabled = true;
         button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Memproses...';
@@ -773,7 +791,8 @@
             await window.showDailyReport();
             if (state.currentPage === 'dashboard') loadDashboard();
         } catch (error) {
-            showToast(error.message || 'Tutup kasir gagal.', true);
+            console.error('Tutup kasir gagal:', error);
+            showToast(/does not exist|column|relation/i.test(error.message || '') ? 'Tutup kasir gagal: fungsi database belum sesuai. Saldo tidak diubah.' : (error.message || 'Tutup kasir gagal.'), true);
             button.disabled = false;
             button.innerHTML = '<i class="fas fa-lock"></i> Tutup Kasir & Setor ke Cash Umum';
         }
@@ -862,8 +881,9 @@
     window.editOrder = async function (orderId) {
         const order = await guardOrderChange(orderId, 'mengubah');
         if (!order) return;
-        const newStatus = (prompt(`Ubah status order ${order.order_number}:\n(held / cancelled)`, order.status) || '').trim();
-        if (!['held', 'cancelled'].includes(newStatus) || newStatus === order.status) return;
+        const newStatus = 'cancelled';
+        if (order.status === newStatus) { showToast('Order ini sudah dibatalkan.', true); return; }
+        if (!(await confirmDialog(`Order ${order.order_number} akan ditandai dibatalkan.`, { title: 'Batalkan order', okText: 'Batalkan order', danger: true }))) return;
         const { error } = await supabase.from('orders').update({ status: newStatus, updated_at: new Date().toISOString() }).eq('id', orderId);
         if (error) { showToast('Gagal: ' + error.message, true); return; }
         showToast('Order diupdate!');
@@ -871,7 +891,7 @@
     };
     window.deleteOrder = async function (orderId) {
         if (!(await guardOrderChange(orderId, 'menghapus'))) return;
-        if (!confirm('Hapus order ini? Data akan hilang permanen.')) return;
+        if (!(await confirmDialog('Order ini akan dihapus permanen.', { title: 'Hapus order', okText: 'Hapus', danger: true }))) return;
         const { error } = await supabase.from('orders').delete().eq('id', orderId);
         if (error) { showToast('Gagal: ' + error.message, true); return; }
         showToast('Order dihapus');
@@ -1087,7 +1107,7 @@
         await loadCash();
     };
     window.deleteMutation = async function (id) {
-        if (!confirm('Hapus mutasi manual atau penyesuaian fisik ini? Saldo dan jurnal terkait akan dibalik.')) return;
+        if (!(await confirmDialog('Saldo dan jurnal terkait akan dibalik.', { title: 'Hapus mutasi', okText: 'Hapus', danger: true }))) return;
         const { data, error } = await supabase.rpc('delete_cash_mutation', { p_mutation_id: id });
         if (error || !data?.success) { showToast('Gagal: ' + (error?.message || data?.message || 'Unknown'), true); return; }
         showToast('Mutasi berhasil dihapus!');
@@ -1212,7 +1232,7 @@
     };
     window.deleteUser = async function (id) {
         if (id === state.currentUser.id) { showToast('Tidak bisa hapus user sendiri!', true); return; }
-        if (!confirm('Hapus user ini?')) return;
+        if (!(await confirmDialog('User ini tidak bisa login lagi.', { title: 'Hapus user', okText: 'Hapus', danger: true }))) return;
         const { error } = await supabase.from('app_users').update({ is_active: false }).eq('id', id);
         if (error) { showToast('Gagal: ' + error.message, true); return; }
         showToast('User dihapus');
