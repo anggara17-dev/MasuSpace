@@ -43,6 +43,47 @@
     function getJakartaDate() { return new Intl.DateTimeFormat('id-ID', { timeZone: 'Asia/Jakarta', dateStyle: 'medium', timeStyle: 'short' }).format(new Date()); }
     function dayStartISO(dateStr) { return dateStr + 'T00:00:00+07:00'; }
     function dayEndExclusiveISO(dateStr) { return new Date(new Date(dateStr + 'T00:00:00+07:00').getTime() + 86400000).toISOString(); }
+    const isValidDate = v => /^\d{4}-\d{2}-\d{2}$/.test(v || '') && v >= '2020-01-01';
+    let cashRequestId = 0;
+    // Filter tanggal realtime: jalan begitu tanggal diubah (change/input), hanya bila tanggal valid
+    function bindDateFilter(ids, fn, delay = 60) {
+        let t;
+        ids.forEach(id => ['change', 'input'].forEach(ev => document.getElementById(id)?.addEventListener(ev, () => {
+            clearTimeout(t);
+            t = setTimeout(() => { if (ids.every(i => { const v = document.getElementById(i)?.value; return v === '' || isValidDate(v); })) fn(); }, delay);
+        })));
+    }
+    // Satu request (order + item sekaligus); fallback 2 request bila relasi tidak tersedia
+    async function fetchOrders(startISO, endISO, { statuses = null, limit = 500, cols = '*' } = {}) {
+        const build = sel => {
+            let q = supabase.from('orders').select(sel).order('created_at', { ascending: false }).limit(limit);
+            if (startISO) q = q.gte('created_at', startISO);
+            if (endISO) q = q.lt('created_at', endISO);
+            if (statuses) q = q.in('status', statuses);
+            return q;
+        };
+        const first = await build(cols + ', order_items(qty, products(name))');
+        if (!first.error) return first.data || [];
+        const res = await build(cols);
+        if (res.error) throw res.error;
+        const orders = res.data || [];
+        if (orders.length) {
+            const { data: items, error } = await supabase.from('order_items').select('order_id,qty,products(name)').in('order_id', orders.map(o => o.id));
+            if (error) throw error;
+            const map = new Map();
+            (items || []).forEach(i => { if (!map.has(i.order_id)) map.set(i.order_id, []); map.get(i.order_id).push(i); });
+            orders.forEach(o => { o.order_items = map.get(o.id) || []; });
+        }
+        return orders;
+    }
+    // Penanda tutup kasir terakhir (disimpan di tabel settings, cadangan di browser)
+    async function getLastClosedAt() {
+        try {
+            const { data, error } = await supabase.from('settings').select('value').eq('key', 'cashier_shift').maybeSingle();
+            if (!error && data?.value?.last_closed_at) return data.value.last_closed_at;
+        } catch (e) { console.error(e); }
+        return localStorage.getItem('masuspace-last-closed') || null;
+    }
     function showToast(msg, err = false) {
         const t = document.getElementById('toast');
         t.innerText = msg;
@@ -214,21 +255,15 @@
         const rangeEnd = dayEndExclusiveISO(endDate);
         try {
             const [ordersResult, expensesResult, inventoryResult] = await Promise.all([
-                supabase.from('orders').select('id,total,payment_method').gte('created_at', rangeStart).lt('created_at', rangeEnd).in('status', ['paid', 'completed']),
+                fetchOrders(rangeStart, rangeEnd, { statuses: ['paid', 'completed'], cols: 'id,total,payment_method', limit: 1000 }),
                 supabase.from('expenses').select('amount,cash_sources(name)').gte('created_at', rangeStart).lt('created_at', rangeEnd),
                 supabase.rpc('get_inventory_summary')
             ]);
             if (requestId !== dashboardRequestId) return;
-            if (ordersResult.error) throw ordersResult.error;
             if (expensesResult.error) throw expensesResult.error;
-            const orders = ordersResult.data || [];
+            const orders = ordersResult || [];
             const expenses = expensesResult.data || [];
-            let productItems = [];
-            if (orders.length) {
-                const { data, error } = await supabase.from('order_items').select('order_id,qty,products(name)').in('order_id', orders.map(o => o.id));
-                if (error) throw error;
-                productItems = data || [];
-            }
+            const productItems = orders.flatMap(o => o.order_items || []);
             if (requestId !== dashboardRequestId) return;
             const totalRevenue = orders.reduce((s, o) => s + Number(o.total || 0), 0);
             const totalExpense = expenses.reduce((s, x) => s + Number(x.amount || 0), 0);
@@ -243,7 +278,7 @@
             document.getElementById('statExpense').innerText = formatRp(totalExpense);
             document.getElementById('statProfit').innerText = formatRp(netProfit);
             document.getElementById('statProfit').style.color = netProfit >= 0 ? 'var(--primary-dark)' : '#ef4444';
-            document.getElementById('statCash').innerText = formatRp(pay.cash - cashierExpenses);
+            document.getElementById('statCash').innerText = formatRp(pay.cash - totalExpense);
             document.getElementById('statLowStock').innerText = lowStock;
             const isToday = startDate === today && endDate === today;
             document.getElementById('dashboardPaymentTitle').innerText = isToday ? 'Pembayaran Hari Ini' : 'Pembayaran Periode';
@@ -676,51 +711,35 @@
         content.innerHTML = '<div style="text-align:center;padding:20px">Memuat...</div>';
         document.getElementById('dailyReportModal').classList.add('active');
         try {
-            const [orderResult, expenseResult, cashResult] = await Promise.all([
-                supabase.from('orders').select('id,order_number,customer_name,total,payment_method,created_at').gte('created_at', dayStart).lt('created_at', dayEnd).in('status', ['paid', 'completed']),
-                supabase.from('expenses').select('amount, cash_sources(name)').gte('created_at', dayStart).lt('created_at', dayEnd),
-                supabase.rpc('get_cash_sources')
+            // Shift berjalan = sejak tutup kasir terakhir hari ini (atau awal hari). Setelah tutup kasir semua angka kembali 0.
+            const closedAt = await getLastClosedAt();
+            const from = closedAt && new Date(closedAt) > new Date(dayStart) ? new Date(closedAt).toISOString() : dayStart;
+            const [orders, expRes] = await Promise.all([
+                fetchOrders(from, dayEnd, { statuses: PAID_STATUS, cols: 'id,total,payment_method', limit: 1000 }),
+                supabase.from('expenses').select('amount').gte('created_at', from).lt('created_at', dayEnd)
             ]);
-            if (orderResult.error) throw orderResult.error;
-            if (expenseResult.error) throw expenseResult.error;
-            const orders = orderResult.data || [];
-            const expenses = expenseResult.data || [];
-            const sum = (list, fn) => list.reduce((s, x) => s + Number(fn(x) || 0), 0);
+            if (expRes.error) throw expRes.error;
+            const sum = (list, fn) => list.reduce((t, x) => t + Number(fn(x) || 0), 0);
             const totalRevenue = sum(orders, o => o.total);
-            const qrisSales = sum(orders.filter(o => o.payment_method === 'qris'), o => o.total);
-            const debitSales = sum(orders.filter(o => o.payment_method === 'debit'), o => o.total);
-            const cashSales = totalRevenue - qrisSales - debitSales;
-            const totalExpenses = sum(expenses, x => x.amount);
-            const cashierExpenses = sum(expenses.filter(x => x.cash_sources?.name === 'Cash Kasir'), x => x.amount);
-            // Saldo Cash Kasir diambil dari sistem (berlaku juga setelah tutup kasir); fallback hitungan hari ini bila tidak bisa dibaca
-            const systemBalance = cashResult.error ? null : Number((cashResult.data || []).find(s => s.name === 'Cash Kasir')?.current_balance || 0);
-            const cashierBalance = systemBalance ?? (cashSales - cashierExpenses);
+            const qris = sum(orders.filter(o => o.payment_method === 'qris'), o => o.total);
+            const debit = sum(orders.filter(o => o.payment_method === 'debit'), o => o.total);
+            const totalExpenses = sum(expRes.data || [], x => x.amount);
+            const cashSales = totalRevenue - qris - debit;
+            const cashExpected = cashSales - totalExpenses; // Cash Kasir = Penjualan - QRIS - Debit - Pengeluaran
 
-            let items = [];
-            if (orders.length) {
-                const { data, error } = await supabase.from('order_items').select('order_id,qty,products(name)').in('order_id', orders.map(o => o.id));
-                if (error) throw error;
-                items = data || [];
-            }
-            const menuByOrder = new Map();
-            items.forEach(i => {
-                const list = menuByOrder.get(i.order_id) || [];
-                list.push(escapeHtml(i.products?.name || 'Menu') + ' × ' + Number(i.qty || 0));
-                menuByOrder.set(i.order_id, list);
-            });
-
-            const canClose = state.currentUser?.role === 'owner' && state.authUserId && systemBalance !== null;
+            const canClose = state.currentUser?.role === 'owner' && state.authUserId;
             const closingPanel = canClose
-                ? `<section id="cashierClosePanel" data-system="${systemBalance}" class="page-section" style="margin-top:18px"><h4 style="margin:0 0 8px">Tutup Kasir</h4><p style="margin:0 0 12px;color:var(--text-light)">Saldo sistem Cash Kasir: <b>${formatRp(systemBalance)}</b>. Hitung uang fisik, lalu setor ke Cash Umum. Saldo Cash Kasir akan mulai dari Rp 0.</p><div class="input-group"><label>Uang fisik yang dihitung (Rp)</label><input id="cashierPhysicalCash" type="number" min="0" step="1" inputmode="numeric" placeholder="Masukkan hasil hitung fisik"></div><div class="input-group"><label>Catatan selisih (wajib bila ada selisih)</label><input id="cashierCloseNotes" type="text" maxlength="500" placeholder="Contoh: selisih karena uang kembalian"></div><button class="btn-primary" onclick="window.closeCashierShift()"><i class="fas fa-lock"></i> Tutup Kasir & Setor ke Cash Umum</button></section>`
+                ? `<section id="cashierClosePanel" data-system="${cashExpected}" class="page-section" style="margin-top:18px"><h4 style="margin:0 0 8px">Tutup Kasir</h4><p style="margin:0 0 12px;color:var(--text-light)">Cash seharusnya di laci: <b>${formatRp(cashExpected)}</b>. Hitung uang fisik, lalu setor ke Cash Umum. Setelah ditutup, semua angka shift kembali Rp 0.</p><div class="input-group"><label>Uang fisik yang dihitung (Rp)</label><input id="cashierPhysicalCash" type="number" min="0" step="1" inputmode="numeric" placeholder="Masukkan hasil hitung fisik"></div><div class="input-group"><label>Catatan selisih (wajib bila ada selisih)</label><input id="cashierCloseNotes" type="text" maxlength="500" placeholder="Contoh: selisih karena uang kembalian"></div><button class="btn-primary" onclick="window.closeCashierShift()"><i class="fas fa-lock"></i> Tutup Kasir & Setor ke Cash Umum</button></section>`
                 : '<p style="margin-top:16px;font-size:12px;color:var(--text-light)">Tutup kasir dilakukan oleh Owner.</p>';
-
-            const orderList = orders.map(o => `<div style="display:flex;justify-content:space-between;gap:12px;padding:8px;border-bottom:1px solid var(--border);font-size:12px"><span>${(menuByOrder.get(o.id) || []).join(', ') || 'Tidak ada detail menu'}</span><b>${formatRp(o.total)}</b></div>`).join('');
+            const orderList = orders.map(o => `<div style="display:flex;justify-content:space-between;gap:12px;padding:8px;border-bottom:1px solid var(--border);font-size:12px"><span>${(o.order_items || []).map(i => escapeHtml(i.products?.name || 'Menu') + ' × ' + Number(i.qty || 0)).join(', ') || 'Tidak ada detail menu'}</span><b>${formatRp(o.total)}</b></div>`).join('');
             const card = (label, val, color) => `<div class="stat-card"><div class="stat-info"><div class="stat-label">${label}</div><div class="stat-value" style="font-size:18px;${color ? 'color:' + color : ''}">${formatRp(val)}</div></div></div>`;
             const line = (label, val) => `<div style="display:flex;justify-content:space-between;padding:6px 0"><span>${label}</span><b>${formatRp(val)}</b></div>`;
             content.innerHTML =
-                `<div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr));gap:10px;margin-bottom:16px">${card('TOTAL PENJUALAN', totalRevenue)}${card('NON TUNAI', qrisSales + debitSales)}${card('TOTAL PENGELUARAN', totalExpenses, '#ef4444')}${card('SALDO CASH KASIR', cashierBalance, cashierBalance >= 0 ? 'var(--primary)' : '#ef4444')}</div>` +
-                `<h4 style="margin:16px 0 10px">Pembayaran</h4><div style="background:var(--bg);padding:12px;border-radius:8px">${line('Cash', cashSales)}${line('QRIS', qrisSales)}${line('Debit', debitSales)}</div>` +
-                `<h4 style="margin:16px 0 10px">Menu Terjual Hari Ini</h4><div style="max-height:200px;overflow-y:auto">${orderList || '<p style="color:var(--text-light);text-align:center;padding:20px">Belum ada penjualan</p>'}</div>` + closingPanel;
+                `<p style="font-size:12px;color:var(--text-light);margin-bottom:12px">Shift sejak ${new Date(from).toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit' })} WIB${closedAt && from !== dayStart ? ' (setelah tutup kasir terakhir)' : ''}</p>` +
+                `<div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr));gap:10px;margin-bottom:16px">${card('TOTAL PENJUALAN', totalRevenue)}${card('QRIS + DEBIT', qris + debit)}${card('TOTAL PENGELUARAN', totalExpenses, '#ef4444')}${card('CASH KASIR', cashExpected, cashExpected >= 0 ? 'var(--primary)' : '#ef4444')}</div>` +
+                `<p style="font-size:11px;color:var(--text-light);margin:-8px 0 12px">Cash Kasir = Penjualan − QRIS − Debit − Pengeluaran</p>` +
+                `<h4 style="margin:16px 0 10px">Pembayaran</h4><div style="background:var(--bg);padding:12px;border-radius:8px">${line('Cash', cashSales)}${line('QRIS', qris)}${line('Debit', debit)}</div>` +
+                `<h4 style="margin:16px 0 10px">Menu Terjual</h4><div style="max-height:200px;overflow-y:auto">${orderList || '<p style="color:var(--text-light);text-align:center;padding:20px">Belum ada penjualan</p>'}</div>` + closingPanel;
         } catch (error) {
             content.innerHTML = '<p style="color:#ef4444;text-align:center">Gagal memuat: ' + escapeHtml(error.message) + '</p>';
         }
@@ -734,20 +753,25 @@
         if (!field || field.value.trim() === '' || !Number.isSafeInteger(physicalCash) || physicalCash < 0) { showToast('Masukkan hitung fisik dalam angka rupiah bulat.', true); return; }
         const system = Number(panel?.dataset.system || 0);
         const diff = physicalCash - system;
-        const notes = document.getElementById('cashierCloseNotes')?.value.trim() || null;
+        const notes = document.getElementById('cashierCloseNotes')?.value.trim() || '';
         if (system <= 0 && physicalCash <= 0) { showToast('Tidak ada saldo Cash Kasir untuk ditutup.', true); return; }
         if (diff !== 0 && !notes) { showToast('Ada selisih ' + formatRp(diff) + '. Isi catatan selisih dulu.', true); return; }
-        if (!window.confirm('Saldo sistem ' + formatRp(system) + ', fisik ' + formatRp(physicalCash) + ', selisih ' + formatRp(diff) + '.\nSetor ke Cash Umum dan mulai Cash Kasir dari Rp 0?')) return;
+        if (!window.confirm('Cash seharusnya ' + formatRp(system) + ', fisik ' + formatRp(physicalCash) + ', selisih ' + formatRp(diff) + '.\nSetor ke Cash Umum dan mulai shift baru dari Rp 0?')) return;
         const button = panel.querySelector('button');
         button.disabled = true;
         button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Memproses...';
         try {
-            const { data, error } = await supabase.rpc('close_cashier_shift', { p_physical_cash: physicalCash, p_notes: notes });
+            const fullNotes = `Seharusnya ${system} | Fisik ${physicalCash} | Selisih ${diff}` + (notes ? ' | ' + notes : '');
+            const { data, error } = await supabase.rpc('close_cashier_shift', { p_physical_cash: physicalCash, p_notes: fullNotes });
             if (error) throw error;
             if (!data?.success) throw new Error(data?.message || 'Penutupan kasir gagal.');
-            panel.innerHTML = `<h4 style="margin:0 0 8px">Kasir berhasil ditutup</h4><p>Saldo sistem: ${formatRp(data.expected_balance)} · Fisik: ${formatRp(data.physical_balance)} · Selisih: ${formatRp(data.difference)}</p><p>Setoran ke Cash Umum: ${formatRp(data.physical_balance)}. Saldo Cash Kasir sekarang Rp 0.</p>`;
-            delete panel.dataset.system;
-            showToast('Kasir ditutup; saldo disetor ke Cash Umum.');
+            const marker = { last_closed_at: new Date().toISOString(), expected: system, physical: physicalCash, difference: diff, closed_by: state.currentUser?.full_name || '' };
+            localStorage.setItem('masuspace-last-closed', marker.last_closed_at);
+            const { error: markError } = await supabase.rpc('save_setting', { p_key: 'cashier_shift', p_value: marker });
+            if (markError) showToast('Kasir ditutup, tetapi penanda shift gagal disimpan: ' + markError.message, true);
+            else showToast('Kasir ditutup; shift baru dimulai dari Rp 0.');
+            await window.showDailyReport();
+            if (state.currentPage === 'dashboard') loadDashboard();
         } catch (error) {
             showToast(error.message || 'Tutup kasir gagal.', true);
             button.disabled = false;
@@ -767,27 +791,15 @@
         const tableBody = document.getElementById('ordersTableBody');
         tableBody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px">Memuat riwayat order...</td></tr>';
         try {
-            let query = supabase.from('orders').select('*').order('created_at', { ascending: false }).limit(500);
-            if (start) query = query.gte('created_at', dayStartISO(start));
-            if (end) query = query.lt('created_at', dayEndExclusiveISO(end));
-            const { data: orderData, error } = await query;
+            const orders = await fetchOrders(start ? dayStartISO(start) : null, end ? dayEndExclusiveISO(end) : null, { limit: 500 });
             if (requestId !== orderRequestId) return;
-            if (error) throw error;
-            const orders = orderData || [];
             if (!orders.length) {
                 tableBody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text-light)">Tidak ada data</td></tr>';
                 document.getElementById('ordersSummary').innerHTML = '';
                 return;
             }
-            const { data: itemData, error: itemError } = await supabase.from('order_items').select('order_id,qty,products(name)').in('order_id', orders.map(o => o.id));
-            if (requestId !== orderRequestId) return;
-            if (itemError) throw itemError;
             const menuByOrder = new Map();
-            (itemData || []).forEach(i => {
-                const list = menuByOrder.get(i.order_id) || [];
-                list.push(`${escapeHtml(i.products?.name || 'Produk')} × ${Number(i.qty || 0)}`);
-                menuByOrder.set(i.order_id, list);
-            });
+            orders.forEach(o => menuByOrder.set(o.id, (o.order_items || []).map(i => `${escapeHtml(i.products?.name || 'Produk')} × ${Number(i.qty || 0)}`)));
             let paidCount = 0, totalCash = 0, totalNonCash = 0, totalRevenue = 0;
             tableBody.innerHTML = orders.map(o => {
                 const amount = Number(o.total || 0);
@@ -926,6 +938,7 @@
             showToast(msg, true);
         };
         try {
+            const cashReq = ++cashRequestId;
             const { data, error: srcError } = await supabase.rpc('get_cash_sources');
             if (srcError) {
                 console.error('Gagal memuat sumber kas:', srcError);
@@ -944,6 +957,7 @@
             if (start) q = q.gte('created_at', dayStartISO(start));
             if (end) q = q.lt('created_at', dayEndExclusiveISO(end));
             const { data: muts, error: mutError } = await q;
+            if (cashReq !== cashRequestId) return;
             if (mutError) {
                 console.error(mutError);
                 body.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-light)">Saldo kas dimuat, tetapi riwayat mutasi gagal. Coba muat ulang.</td></tr>';
@@ -1213,9 +1227,10 @@
     document.addEventListener('DOMContentLoaded', function () {
         loadUsersToDropdown();
         window.restoreOwnerSession();
-        ['dashboardStartDate', 'dashboardEndDate'].forEach(id => document.getElementById(id)?.addEventListener('change', window.applyDashboardFilter));
-        ['orderFilterStart', 'orderFilterEnd'].forEach(id => document.getElementById(id)?.addEventListener('change', () => { clearTimeout(orderFilterTimer); orderFilterTimer = setTimeout(loadOrders, 180); }));
-        ['reportStartDate', 'reportEndDate'].forEach(id => document.getElementById(id)?.addEventListener('change', window.applyReportFilter));
+        bindDateFilter(['dashboardStartDate', 'dashboardEndDate'], loadDashboard);
+        bindDateFilter(['orderFilterStart', 'orderFilterEnd'], loadOrders);
+        bindDateFilter(['reportStartDate', 'reportEndDate'], window.loadSalesReport);
+        bindDateFilter(['cashFilterStart', 'cashFilterEnd'], loadCash);
         document.getElementById('loginForm')?.addEventListener('submit', function (e) { e.preventDefault(); window.handleLogin(e); });
     });
 })();
