@@ -7,7 +7,7 @@
     const SUPABASE_URL = 'https://lgyrypbzaspysibssttm.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxneXJ5cGJ6YXNweXNpYnNzdHRtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE2NDM4MzIsImV4cCI6MjEwNzIxOTgzMn0.lUPnYTvG8KjxQe2-e2FAhuDXbh6XA2g31Vc2_JWObN4';
     // ISI dengan email user Owner di Supabase (Authentication > Users)
-    const OWNER_AUTH_EMAIL = 'ISI-EMAIL-OWNER-DI-SINI';
+    const OWNER_AUTH_EMAIL = 'masuspace@gmail.com';
 
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     document.addEventListener('submit', function (e) { e.preventDefault(); return false; });
