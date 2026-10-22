@@ -341,3 +341,6 @@ body.role-kasir .owner-only { display:none !important; }
 
 .select-wrapper input { width:100%; padding:14px 14px 14px 42px; border:2px solid #e2e8f0; border-radius:10px; font-size:14px; font-weight:500; color:#0f172a; background:#fff; outline:none; }
 .select-wrapper input:focus { border-color:var(--brand); box-shadow:0 0 0 3px rgba(16,185,129,.1); }
+
+.link-btn { background:none; border:none; color:var(--brand-dark); font-weight:600; font-size:13px; cursor:pointer; padding:4px 0; }
+.link-btn:hover { text-decoration:underline; }
