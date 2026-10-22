@@ -9,14 +9,13 @@
     // ISI dengan email user Owner di Supabase (Authentication > Users)
     const OWNER_AUTH_EMAIL = 'khaerulanggara05@gmail.com';
 
-
     // Dibaca sebelum Supabase membersihkan hash URL (link reset password dari email)
     const RECOVERY_LINK = /type=recovery/.test(window.location.hash);
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     supabase.auth.onAuthStateChange(event => { if (event === 'PASSWORD_RECOVERY') window.openResetModal(); });
     document.addEventListener('submit', function (e) { e.preventDefault(); return false; });
 
-    const OWNER_ONLY_PAGES = ['cash', 'reports', 'settings'];
+    const OWNER_ONLY_PAGES = ['menu', 'categories', 'inventory', 'cash', 'reports', 'settings'];
     let state = {
         currentUser: null, authUserId: null, currentPage: 'dashboard',
         cart: [], categories: [], products: [], variants: [], addons: [],
@@ -246,7 +245,7 @@
     });
 
     /* ---------- Navigasi ---------- */
-    const PAGE_TITLES = { dashboard: 'Dashboard', kasir: 'Kasir POS', orders: 'Riwayat Order', cash: 'Kas & Bank', reports: 'Laporan', settings: 'Pengaturan' };
+    const PAGE_TITLES = { dashboard: 'Dashboard', kasir: 'Kasir POS', orders: 'Riwayat Order', menu: 'Menu', categories: 'Kategori', inventory: 'Stok', cash: 'Kas & Bank', reports: 'Laporan', settings: 'Pengaturan' };
     window.navigate = async function (page) {
         if (!PAGE_TITLES[page]) return false;
         if (state.currentUser?.role === 'kasir' && OWNER_ONLY_PAGES.includes(page)) { showToast('Halaman ini khusus Owner.', true); return false; }
@@ -255,7 +254,7 @@
         document.getElementById(`page-${page}`)?.classList.add('active');
         document.querySelectorAll('.nav-item[data-page]').forEach(n => n.classList.toggle('active', n.dataset.page === page));
         document.getElementById('pageTitle').innerText = PAGE_TITLES[page];
-        const loaders = { dashboard: loadDashboard, kasir: loadKasirData, orders: loadOrders, cash: loadCash, reports: loadReports, settings: loadSettings };
+        const loaders = { dashboard: loadDashboard, kasir: loadKasirData, orders: loadOrders, menu: loadMenuPage, categories: loadCategoriesPage, inventory: loadInventoryPage, cash: loadCash, reports: loadReports, settings: loadSettings };
         try { await loaders[page](); } catch (error) { console.error(error); showToast('Gagal memuat halaman: ' + error.message, true); }
         if (window.innerWidth <= 1024) document.getElementById('sidebar').classList.add('collapsed');
         window.closeUserMenu();
@@ -832,7 +831,7 @@
             if (state.currentPage === 'dashboard') loadDashboard();
         } catch (error) {
             console.error('Tutup kasir gagal:', error);
-            showToast(/does not exist|column|relation/i.test(error.message || '') ? 'Tutup kasir gagal: fungsi database belum sesuai. Saldo tidak diubah.' : (error.message || 'Tutup kasir gagal.'), true);
+            showToast('Tutup kasir gagal: ' + (error.message || 'Unknown'), true);
             button.disabled = false;
             button.innerHTML = '<i class="fas fa-lock"></i> Tutup Kasir & Setor ke Cash Umum';
         }
@@ -1316,6 +1315,136 @@
         await supabase.auth.signOut();
         history.replaceState(null, '', window.location.pathname);
         window.closeModal('resetPasswordModal');
+    };
+
+    /* ---------- Menu, Kategori, Stok ---------- */
+    const val = id => document.getElementById(id).value.trim();
+    const emptyRow = (cols, msg) => `<tr><td colspan="${cols}" style="text-align:center;padding:30px;color:var(--text-light)">${msg}</td></tr>`;
+    const refreshKasirCache = () => { state.categories = []; };
+    const actionBtns = (edit, del, extra = '') => `<td class="mutation-action-btns">${extra}<button class="edit-btn" onclick="${edit}" title="Edit"><i class="fas fa-pen"></i></button><button class="delete-mut-btn" onclick="${del}" title="Hapus"><i class="fas fa-trash"></i></button></td>`;
+    async function runSave(promise, okMsg, closeId, reload) {
+        const { error } = await promise;
+        if (error) { showToast('Gagal: ' + error.message, true); return; }
+        showToast(okMsg); window.closeModal(closeId); refreshKasirCache(); await reload();
+    }
+
+    async function loadMenuPage() {
+        const [cats, prods] = await Promise.all([
+            supabase.from('categories').select('*').eq('is_active', true).order('display_order'),
+            supabase.from('products').select('*').eq('is_active', true).order('display_order')
+        ]);
+        if (prods.error) throw prods.error;
+        state.menuCats = cats.data || []; state.menuProducts = prods.data || [];
+        const catName = new Map(state.menuCats.map(c => [c.id, (c.icon || '') + ' ' + c.name]));
+        document.getElementById('menuTableBody').innerHTML = state.menuProducts.length ? state.menuProducts.map(p => `<tr><td><b>${escapeHtml(p.name)}</b></td><td>${escapeHtml(catName.get(p.category_id) || '-')}</td><td>${formatRp(p.base_price)}</td>${actionBtns(`window.editProduct('${p.id}')`, `window.deleteProduct('${p.id}')`, `<button class="view-btn" onclick="window.showRecipeModal('${p.id}')" title="Resep"><i class="fas fa-flask"></i></button>`)}</tr>`).join('') : emptyRow(4, 'Belum ada menu');
+    }
+    function fillProductForm(p) {
+        document.getElementById('editProductId').value = p?.id || '';
+        document.getElementById('editProductName').value = p?.name || '';
+        document.getElementById('editProductPrice').value = p?.base_price ?? '';
+        document.getElementById('editProductDesc').value = p?.description || '';
+        document.getElementById('editProductCategory').innerHTML = '<option value="">Tanpa kategori</option>' + (state.menuCats || []).map(c => `<option value="${c.id}" ${p?.category_id === c.id ? 'selected' : ''}>${escapeHtml((c.icon || '') + ' ' + c.name)}</option>`).join('');
+        document.getElementById('productFormModal').classList.add('active');
+    }
+    window.showProductForm = () => fillProductForm(null);
+    window.editProduct = id => fillProductForm((state.menuProducts || []).find(p => p.id === id));
+    window.saveProduct = async function () {
+        const id = val('editProductId'), name = val('editProductName'), price = parseFloat(val('editProductPrice'));
+        if (!name || !(price >= 0)) { showToast('Nama dan harga wajib diisi!', true); return; }
+        const row = { name, category_id: document.getElementById('editProductCategory').value || null, base_price: price, description: val('editProductDesc') };
+        await runSave(id ? supabase.from('products').update({ ...row, updated_at: new Date().toISOString() }).eq('id', id) : supabase.from('products').insert({ ...row, is_active: true }), 'Menu disimpan!', 'productFormModal', loadMenuPage);
+    };
+    window.deleteProduct = async function (id) {
+        if (!(await confirmDialog('Menu ini tidak akan tampil lagi di kasir. Riwayat penjualan tetap aman.', { title: 'Hapus menu', okText: 'Hapus', danger: true }))) return;
+        const { error } = await supabase.from('products').update({ is_active: false }).eq('id', id);
+        if (error) { showToast('Gagal: ' + error.message, true); return; }
+        showToast('Menu dihapus'); refreshKasirCache(); loadMenuPage();
+    };
+
+    async function loadCategoriesPage() {
+        const [cats, prods] = await Promise.all([
+            supabase.from('categories').select('*').eq('is_active', true).order('display_order'),
+            supabase.from('products').select('category_id').eq('is_active', true)
+        ]);
+        if (cats.error) throw cats.error;
+        state.menuCats = cats.data || [];
+        const count = {}; (prods.data || []).forEach(p => { count[p.category_id] = (count[p.category_id] || 0) + 1; });
+        document.getElementById('categoryTableBody').innerHTML = state.menuCats.length ? state.menuCats.map(c => `<tr><td style="font-size:20px">${escapeHtml(c.icon || '')}</td><td><b>${escapeHtml(c.name)}</b></td><td>${count[c.id] || 0}</td>${actionBtns(`window.editCategory('${c.id}')`, `window.deleteCategory('${c.id}')`)}</tr>`).join('') : emptyRow(4, 'Belum ada kategori');
+    }
+    function fillCategoryForm(c) {
+        document.getElementById('editCategoryId').value = c?.id || '';
+        document.getElementById('editCategoryName').value = c?.name || '';
+        document.getElementById('editCategoryIcon').value = c?.icon || '';
+        document.getElementById('categoryFormModal').classList.add('active');
+    }
+    window.showCategoryForm = () => fillCategoryForm(null);
+    window.editCategory = id => fillCategoryForm((state.menuCats || []).find(c => c.id === id));
+    window.saveCategory = async function () {
+        const id = val('editCategoryId'), name = val('editCategoryName');
+        if (!name) { showToast('Nama kategori wajib!', true); return; }
+        const row = { name, icon: val('editCategoryIcon') };
+        await runSave(id ? supabase.from('categories').update(row).eq('id', id) : supabase.from('categories').insert({ ...row, is_active: true, display_order: 99 }), 'Kategori disimpan!', 'categoryFormModal', loadCategoriesPage);
+    };
+    window.deleteCategory = async function (id) {
+        if (!(await confirmDialog('Menu di kategori ini tidak ikut terhapus, tetapi akan tanpa kategori.', { title: 'Hapus kategori', okText: 'Hapus', danger: true }))) return;
+        const { error } = await supabase.from('categories').update({ is_active: false }).eq('id', id);
+        if (error) { showToast('Gagal: ' + error.message, true); return; }
+        showToast('Kategori dihapus'); refreshKasirCache(); loadCategoriesPage();
+    };
+
+    async function loadInventoryPage() {
+        const { data, error } = await supabase.from('ingredients').select('*').eq('is_active', true).order('name');
+        if (error) throw error;
+        state.ingredients = data || [];
+        const st = i => Number(i.stock_qty) <= 0 ? ['Habis', 'danger'] : Number(i.stock_qty) <= Number(i.min_stock) ? ['Menipis', 'warning'] : ['Aman', 'success'];
+        const low = state.ingredients.filter(i => st(i)[1] === 'warning').length, out = state.ingredients.filter(i => st(i)[1] === 'danger').length;
+        const value = state.ingredients.reduce((s, i) => s + Number(i.stock_qty) * Number(i.buy_price), 0);
+        const card = (l, v) => `<div class="stat-card"><div class="stat-info"><div class="stat-label">${l}</div><div class="stat-value">${v}</div></div></div>`;
+        document.getElementById('invStats').innerHTML = card('Total Bahan', state.ingredients.length) + card('Menipis', low) + card('Habis', out) + card('Nilai Stok', formatRp(value));
+        document.getElementById('ingredientsTableBody').innerHTML = state.ingredients.length ? state.ingredients.map(i => { const [label, cls] = st(i); return `<tr><td><b>${escapeHtml(i.name)}</b></td><td>${Number(i.stock_qty)}</td><td>${Number(i.min_stock)}</td><td>${escapeHtml(i.unit)}</td><td>${formatRp(i.buy_price)}</td><td><b>${formatRp(i.stock_qty * i.buy_price)}</b></td><td>${escapeHtml(i.supplier || '-')}</td><td><span class="badge badge-${cls}">${label}</span></td>${actionBtns(`window.editIngredient('${i.id}')`, `window.deleteIngredient('${i.id}')`)}</tr>`; }).join('') : emptyRow(9, 'Belum ada data bahan baku');
+    }
+    function fillIngredientForm(i) {
+        const set = (id, v) => { document.getElementById(id).value = v; };
+        set('editIngredientId', i?.id || ''); set('editIngredientName', i?.name || ''); set('editIngredientStock', i?.stock_qty ?? '');
+        set('editIngredientUnit', i?.unit || 'gram'); set('editIngredientMin', i?.min_stock ?? ''); set('editIngredientPrice', i?.buy_price ?? ''); set('editIngredientSupplier', i?.supplier || '');
+        document.getElementById('ingredientFormModal').classList.add('active');
+    }
+    window.showIngredientForm = () => fillIngredientForm(null);
+    window.editIngredient = id => fillIngredientForm((state.ingredients || []).find(i => i.id === id));
+    window.saveIngredient = async function () {
+        const id = val('editIngredientId'), name = val('editIngredientName');
+        if (!name) { showToast('Nama bahan wajib!', true); return; }
+        const n = f => parseFloat(val(f)) || 0;
+        const row = { name, stock_qty: n('editIngredientStock'), unit: val('editIngredientUnit') || 'gram', min_stock: n('editIngredientMin'), buy_price: n('editIngredientPrice'), supplier: val('editIngredientSupplier') };
+        await runSave(id ? supabase.from('ingredients').update({ ...row, updated_at: new Date().toISOString() }).eq('id', id) : supabase.from('ingredients').insert({ ...row, is_active: true }), 'Bahan disimpan!', 'ingredientFormModal', loadInventoryPage);
+    };
+    window.deleteIngredient = async function (id) {
+        if (!(await confirmDialog('Bahan ini disembunyikan dari daftar stok.', { title: 'Hapus bahan', okText: 'Hapus', danger: true }))) return;
+        const { error } = await supabase.from('ingredients').update({ is_active: false }).eq('id', id);
+        if (error) { showToast('Gagal: ' + error.message, true); return; }
+        showToast('Bahan dihapus'); loadInventoryPage();
+    };
+
+    window.showRecipeModal = async function (productId) {
+        const p = (state.menuProducts || []).find(x => x.id === productId);
+        if (!p) return;
+        document.getElementById('recipeContent').innerHTML = '<div style="text-align:center;padding:20px">Memuat...</div>';
+        document.getElementById('recipeModal').classList.add('active');
+        const [rec, ing] = await Promise.all([supabase.rpc('get_product_recipes', { p_product_id: productId }), supabase.from('ingredients').select('id,name,unit').eq('is_active', true).order('name')]);
+        const list = rec.data || [];
+        document.getElementById('recipeContent').innerHTML = `<h4 style="margin-bottom:12px">Resep: ${escapeHtml(p.name)}</h4><div style="max-height:260px;overflow-y:auto;margin-bottom:14px">${list.length ? list.map(r => `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;background:var(--bg)"><span><b>${escapeHtml(r.ingredient_name)}</b> · ${Number(r.qty_needed)} ${escapeHtml(r.unit)}</span><button class="btn-secondary" style="color:#ef4444;padding:4px 8px" onclick="window.deleteRecipe('${r.id}','${productId}')"><i class="fas fa-trash"></i></button></div>`).join('') : '<p style="text-align:center;color:var(--text-light);padding:16px">Belum ada resep</p>'}</div><div style="display:flex;gap:8px;padding:12px;background:var(--primary-50);border:1px solid var(--primary);border-radius:8px"><select id="recipeIngredient" style="flex:2;padding:8px;border-radius:6px;border:1px solid var(--border)"><option value="">Pilih bahan</option>${(ing.data || []).map(i => `<option value="${i.id}">${escapeHtml(i.name)} (${escapeHtml(i.unit)})</option>`).join('')}</select><input type="number" id="recipeQty" placeholder="Jumlah" step="0.01" min="0" style="flex:1;min-width:0;padding:8px;border-radius:6px;border:1px solid var(--border)"><button class="btn-primary" onclick="window.addRecipe('${productId}')"><i class="fas fa-plus"></i></button></div>`;
+    };
+    window.addRecipe = async function (productId) {
+        const ingredientId = document.getElementById('recipeIngredient').value, qty = parseFloat(document.getElementById('recipeQty').value) || 0;
+        if (!ingredientId || qty <= 0) { showToast('Pilih bahan dan isi jumlah!', true); return; }
+        const { data, error } = await supabase.rpc('save_recipe', { p_product_id: productId, p_ingredient_id: ingredientId, p_qty_needed: qty });
+        if (error || !data?.success) { showToast('Gagal: ' + (error?.message || data?.message || 'Unknown'), true); return; }
+        showToast('Resep ditambahkan!'); window.showRecipeModal(productId);
+    };
+    window.deleteRecipe = async function (recipeId, productId) {
+        const { data, error } = await supabase.rpc('delete_recipe', { p_id: recipeId });
+        if (error || !data?.success) { showToast('Gagal: ' + (error?.message || data?.message || 'Unknown'), true); return; }
+        showToast('Resep dihapus!'); window.showRecipeModal(productId);
     };
 
     /* ---------- Modal & start ---------- */
