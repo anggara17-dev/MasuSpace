@@ -157,16 +157,20 @@
 
     window.handleLogin = async function (e) {
         if (e) { e.preventDefault(); e.stopPropagation(); }
-        const select = document.getElementById('loginUsername');
-        const username = select.value.trim();
-        const isOwner = select.selectedOptions[0]?.dataset.role === 'owner';
+        const username = document.getElementById('loginUsername').value.trim();
+        let isOwner = false;
         const password = document.getElementById('loginPassword').value;
         const btn = document.getElementById('loginBtn');
         const originalText = btn.innerHTML;
-        if (!username || !password) { showToast('Pilih pengguna dan isi password!', true); return false; }
+        if (!username || !password) { showToast('Isi username dan password!', true); return false; }
         btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Memproses...';
         btn.disabled = true;
         try {
+            // Role ditentukan dari username yang diketik
+            const { data: found, error: findError } = await supabase.from('app_users').select('role').eq('username', username).eq('is_active', true).maybeSingle();
+            if (findError) throw new Error('Gagal memeriksa username. Coba lagi.');
+            if (!found) throw new Error('Username tidak ditemukan.');
+            isOwner = found.role === 'owner';
             if (isOwner) {
                 const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email: OWNER_AUTH_EMAIL, password });
                 if (authError || !authData?.user) throw new Error('Password Owner salah.');
