@@ -7,9 +7,12 @@
     const SUPABASE_URL = 'https://lgyrypbzaspysibssttm.supabase.co';
     const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxneXJ5cGJ6YXNweXNpYnNzdHRtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE2NDM4MzIsImV4cCI6MjEwNzIxOTgzMn0.lUPnYTvG8KjxQe2-e2FAhuDXbh6XA2g31Vc2_JWObN4';
     // ISI dengan email user Owner di Supabase (Authentication > Users)
-    const OWNER_AUTH_EMAIL = 'masuspace@gmail.com';
+    const OWNER_AUTH_EMAIL = 'ISI-EMAIL-OWNER-DI-SINI';
 
+    // Dibaca sebelum Supabase membersihkan hash URL (link reset password dari email)
+    const RECOVERY_LINK = /type=recovery/.test(window.location.hash);
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    supabase.auth.onAuthStateChange(event => { if (event === 'PASSWORD_RECOVERY') window.openResetModal(); });
     document.addEventListener('submit', function (e) { e.preventDefault(); return false; });
 
     const OWNER_ONLY_PAGES = ['cash', 'reports', 'settings'];
@@ -1247,13 +1250,51 @@
         await loadUsersToDropdown();
     };
 
+    /* ---------- Lupa password ---------- */
+    window.forgotPassword = async function () {
+        const username = document.getElementById('loginUsername').value.trim();
+        if (!username) { showToast('Ketik username dulu, lalu klik Lupa password.', true); return; }
+        const { data: found } = await supabase.from('app_users').select('role').eq('username', username).eq('is_active', true).maybeSingle();
+        if (!found) { showToast('Username tidak ditemukan.', true); return; }
+        if (found.role !== 'owner') { showToast('Password kasir direset oleh Owner di Pengaturan → User.', true); return; }
+        if (!OWNER_AUTH_EMAIL.includes('@')) { showToast('Email Owner belum diisi di main.js (OWNER_AUTH_EMAIL).', true); return; }
+        const masked = OWNER_AUTH_EMAIL.replace(/^(.).*(@.*)$/, '$1***$2');
+        if (!(await confirmDialog(`Link reset password akan dikirim ke ${masked}.`, { title: 'Reset password Owner', okText: 'Kirim link' }))) return;
+        const { error } = await supabase.auth.resetPasswordForEmail(OWNER_AUTH_EMAIL, { redirectTo: window.location.origin + window.location.pathname });
+        if (error) { showToast(/rate|seconds|limit/i.test(error.message) ? 'Terlalu sering meminta link. Tunggu beberapa menit lalu coba lagi.' : 'Gagal mengirim: ' + error.message, true); return; }
+        showToast('Link reset dikirim ke ' + masked + '. Cek inbox dan spam.');
+    };
+    window.openResetModal = function () {
+        document.getElementById('newPassword').value = '';
+        document.getElementById('newPassword2').value = '';
+        document.getElementById('resetPasswordModal').classList.add('active');
+    };
+    window.saveRecoveredPassword = async function () {
+        const p1 = document.getElementById('newPassword').value;
+        const p2 = document.getElementById('newPassword2').value;
+        if (p1.length < 8) { showToast('Password minimal 8 karakter.', true); return; }
+        if (p1 !== p2) { showToast('Kedua password tidak sama.', true); return; }
+        const { error } = await supabase.auth.updateUser({ password: p1 });
+        if (error) { showToast('Gagal menyimpan: ' + error.message, true); return; }
+        await supabase.auth.signOut();
+        history.replaceState(null, '', window.location.pathname);
+        window.closeModal('resetPasswordModal');
+        document.getElementById('loginPassword').value = '';
+        showToast('Password berhasil diubah. Silakan login dengan password baru.');
+    };
+    window.cancelReset = async function () {
+        await supabase.auth.signOut();
+        history.replaceState(null, '', window.location.pathname);
+        window.closeModal('resetPasswordModal');
+    };
+
     /* ---------- Modal & start ---------- */
     window.closeModal = function (id) { document.getElementById(id)?.classList.remove('active'); };
-    document.addEventListener('click', e => { if (e.target.classList.contains('modal-overlay')) e.target.classList.remove('active'); });
+    document.addEventListener('click', e => { if (e.target.classList.contains('modal-overlay') && !e.target.classList.contains('no-dismiss')) e.target.classList.remove('active'); });
 
     document.addEventListener('DOMContentLoaded', function () {
         loadUsersToDropdown();
-        window.restoreOwnerSession();
+        if (!RECOVERY_LINK) window.restoreOwnerSession();
         // Hapus isian password otomatis dari browser (autofill muncul sedikit terlambat)
         [150, 600].forEach(ms => setTimeout(() => { const pw = document.getElementById('loginPassword'); if (pw && document.activeElement !== pw) pw.value = ''; }, ms));
         bindDateFilter(['dashboardStartDate', 'dashboardEndDate'], loadDashboard);
