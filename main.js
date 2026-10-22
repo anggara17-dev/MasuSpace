@@ -188,6 +188,9 @@
             }
         } catch (error) {
             showToast(error.message || 'Gagal masuk.', true);
+            const pw = document.getElementById('loginPassword');
+            pw.value = '';
+            pw.focus();
         } finally {
             btn.innerHTML = originalText;
             btn.disabled = false;
@@ -1247,6 +1250,8 @@
     document.addEventListener('DOMContentLoaded', function () {
         loadUsersToDropdown();
         window.restoreOwnerSession();
+        // Hapus isian password otomatis dari browser (autofill muncul sedikit terlambat)
+        [150, 600].forEach(ms => setTimeout(() => { const pw = document.getElementById('loginPassword'); if (pw && document.activeElement !== pw) pw.value = ''; }, ms));
         bindDateFilter(['dashboardStartDate', 'dashboardEndDate'], loadDashboard);
         bindDateFilter(['orderFilterStart', 'orderFilterEnd'], loadOrders);
         bindDateFilter(['reportStartDate', 'reportEndDate'], window.loadSalesReport);
