@@ -9,6 +9,7 @@
     // ISI dengan email user Owner di Supabase (Authentication > Users)
     const OWNER_AUTH_EMAIL = 'khaerulanggara05@gmail.com';
 
+
     // Dibaca sebelum Supabase membersihkan hash URL (link reset password dari email)
     const RECOVERY_LINK = /type=recovery/.test(window.location.hash);
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -775,6 +776,22 @@
         }
     };
 
+    async function closeShiftManually(physical, notes) {
+        const { data: sources, error } = await supabase.rpc('get_cash_sources');
+        if (error) throw error;
+        const kasir = (sources || []).find(x => x.name === 'Cash Kasir');
+        const umum = (sources || []).find(x => x.name === 'Cash Umum');
+        if (!kasir || !umum) throw new Error('Sumber kas "Cash Kasir" atau "Cash Umum" tidak ditemukan di Kas & Bank.');
+        // 1) saldo sistem Cash Kasir disamakan dengan uang fisik (selisih tercatat sebagai penyesuaian)
+        const r1 = await supabase.rpc('reconcile_cash_balance', { p_source_id: kasir.id, p_physical_balance: physical, p_description: 'Tutup kasir: ' + notes });
+        if (r1.error || r1.data?.success === false) throw new Error(r1.error?.message || r1.data?.message || 'Penyesuaian saldo gagal.');
+        // 2) seluruh uang fisik disetor ke Cash Umum, Cash Kasir kembali 0
+        if (physical > 0) {
+            const r2 = await supabase.rpc('transfer_cash', { p_from: kasir.id, p_to: umum.id, p_amount: physical, p_desc: 'Setoran tutup kasir', p_by: state.currentUser?.id || null });
+            if (r2.error || !r2.data?.success) throw new Error('Saldo sudah disesuaikan, tetapi setoran gagal: ' + (r2.error?.message || r2.data?.message || 'Unknown') + '. Lakukan transfer manual di Kas & Bank.');
+        }
+    }
+
     window.closeCashierShift = async function () {
         if (state.currentUser?.role !== 'owner' || !state.authUserId) { showToast('Hanya Owner yang masuk lewat Supabase Auth dapat menutup kasir.', true); return; }
         const panel = document.getElementById('cashierClosePanel');
@@ -796,9 +813,16 @@
         button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Memproses...';
         try {
             const fullNotes = `Seharusnya ${system} | Fisik ${physicalCash} | Selisih ${diff}` + (notes ? ' | ' + notes : '');
-            const { data, error } = await supabase.rpc('close_cashier_shift', { p_physical_cash: physicalCash, p_notes: fullNotes });
-            if (error) throw error;
-            if (!data?.success) throw new Error(data?.message || 'Penutupan kasir gagal.');
+            const res = await supabase.rpc('close_cashier_shift', { p_physical_cash: physicalCash, p_notes: fullNotes });
+            const dbBroken = res.error && /does not exist|column|relation|function/i.test(res.error.message || '');
+            if (dbBroken) {
+                // Fungsi database bermasalah: tutup kasir lewat penyesuaian saldo + setoran (fungsi Kas & Bank yang sudah ada)
+                console.warn('close_cashier_shift bermasalah, memakai jalur manual:', res.error);
+                await closeShiftManually(physicalCash, fullNotes);
+            } else {
+                if (res.error) throw res.error;
+                if (!res.data?.success) throw new Error(res.data?.message || 'Penutupan kasir gagal.');
+            }
             const marker = { last_closed_at: new Date().toISOString(), expected: system, physical: physicalCash, difference: diff, closed_by: state.currentUser?.full_name || '' };
             localStorage.setItem('masuspace-last-closed', marker.last_closed_at);
             const { error: markError } = await supabase.rpc('save_setting', { p_key: 'cashier_shift', p_value: marker });
