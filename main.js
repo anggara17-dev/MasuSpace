@@ -176,7 +176,13 @@
             isOwner = found.role === 'owner';
             if (isOwner) {
                 const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email: OWNER_AUTH_EMAIL, password });
-                if (authError || !authData?.user) throw new Error('Password Owner salah.');
+                if (OWNER_AUTH_EMAIL.indexOf('@') < 0) throw new Error('OWNER_AUTH_EMAIL di main.js belum diisi (masih placeholder). [v3]');
+                if (authError || !authData?.user) {
+                    const em = OWNER_AUTH_EMAIL.replace(/^(.{2}).*(@.*)$/, '$1***$2');
+                    console.error('Login Owner gagal:', authError);
+                    if (/not confirmed/i.test(authError?.message || '')) throw new Error('Email ' + em + ' belum dikonfirmasi di Supabase. [v3]');
+                    throw new Error('Login ' + em + ' ditolak: email atau password tidak cocok. [v3]');
+                }
                 const { data: owner, error: ownerError } = await supabase.from('app_users')
                     .select('id, username, full_name, role, is_active, avatar_url, auth_user_id')
                     .eq('auth_user_id', authData.user.id).eq('role', 'owner').eq('is_active', true).maybeSingle();
