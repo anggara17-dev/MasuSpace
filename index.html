@@ -51,9 +51,7 @@
                 <button class="nav-item" data-page="dashboard" onclick="window.navigate('dashboard')"><i class="fas fa-gauge-high"></i><span>Dashboard</span></button>
                 <button class="nav-item" data-page="kasir" onclick="window.navigate('kasir')"><i class="fas fa-cash-register"></i><span>Kasir POS</span></button>
                 <button class="nav-item" data-page="orders" onclick="window.navigate('orders')"><i class="fas fa-receipt"></i><span>Riwayat Order</span></button>
-                <button class="nav-item owner-only" data-page="menu" onclick="window.navigate('menu')"><i class="fas fa-utensils"></i><span>Menu</span></button>
-                <button class="nav-item owner-only" data-page="categories" onclick="window.navigate('categories')"><i class="fas fa-tags"></i><span>Kategori</span></button>
-                <button class="nav-item owner-only" data-page="inventory" onclick="window.navigate('inventory')"><i class="fas fa-boxes-stacked"></i><span>Stok</span></button>
+                <button class="nav-item owner-only" data-page="menu" onclick="window.navigate('menu')"><i class="fas fa-utensils"></i><span>Menu & Stok</span></button>
                 <button class="nav-item owner-only" data-page="cash" onclick="window.navigate('cash')"><i class="fas fa-vault"></i><span>Kas & Bank</span></button>
                 <button class="nav-item owner-only" data-page="reports" onclick="window.navigate('reports')"><i class="fas fa-chart-column"></i><span>Laporan</span></button>
                 <button class="nav-item owner-only" data-page="settings" onclick="window.navigate('settings')"><i class="fas fa-gear"></i><span>Pengaturan</span></button>
@@ -156,10 +154,13 @@
                     <div class="table-container"><table class="data-table"><thead><tr><th>Tanggal</th><th>Tipe</th><th>Customer</th><th>Menu</th><th>Metode</th><th>Total</th><th>Status</th><th>Aksi</th></tr></thead><tbody id="ordersTableBody"></tbody></table></div>
                 </div>
 
-                <!-- MENU, KATEGORI, STOK -->
-                <div id="page-menu" class="page"><div class="page-header"><h2>Daftar Menu</h2><button class="btn-primary" onclick="window.showProductForm()"><i class="fas fa-plus"></i> Tambah Menu</button></div><div class="table-container"><table class="data-table"><thead><tr><th>Nama</th><th>Kategori</th><th>Harga</th><th>Aksi</th></tr></thead><tbody id="menuTableBody"></tbody></table></div></div>
-                <div id="page-categories" class="page"><div class="page-header"><h2>Kategori Menu</h2><button class="btn-primary" onclick="window.showCategoryForm()"><i class="fas fa-plus"></i> Tambah Kategori</button></div><div class="table-container"><table class="data-table"><thead><tr><th>Ikon</th><th>Nama</th><th>Jumlah Menu</th><th>Aksi</th></tr></thead><tbody id="categoryTableBody"></tbody></table></div></div>
-                <div id="page-inventory" class="page"><div class="page-header"><h2>Stok Bahan</h2><button class="btn-primary" onclick="window.showIngredientForm()"><i class="fas fa-plus"></i> Tambah Bahan</button></div><div class="stats-grid compact" id="invStats" style="grid-template-columns:repeat(4,1fr)"></div><div class="table-container"><table class="data-table"><thead><tr><th>Nama</th><th>Stok</th><th>Min</th><th>Satuan</th><th>Harga Beli</th><th>Nilai Stok</th><th>Supplier</th><th>Status</th><th>Aksi</th></tr></thead><tbody id="ingredientsTableBody"></tbody></table></div></div>
+                <!-- MENU & STOK -->
+                <div id="page-menu" class="page">
+                    <div class="tabs"><button class="tab active" onclick="window.switchMenuTab('menu', this)"><i class="fas fa-utensils"></i> Menu</button><button class="tab" onclick="window.switchMenuTab('categories', this)"><i class="fas fa-tags"></i> Kategori</button><button class="tab" onclick="window.switchMenuTab('inventory', this)"><i class="fas fa-boxes-stacked"></i> Stok</button></div>
+                    <div id="panel-menu" class="menu-panel"><div class="page-header"><h2>Daftar Menu</h2><button class="btn-primary" onclick="window.showProductForm()"><i class="fas fa-plus"></i> Tambah Menu</button></div><div class="table-container"><table class="data-table"><thead><tr><th>Nama</th><th>Kategori</th><th>Harga</th><th>Aksi</th></tr></thead><tbody id="menuTableBody"></tbody></table></div></div>
+                    <div id="panel-categories" class="menu-panel" style="display:none"><div class="page-header"><h2>Kategori Menu</h2><button class="btn-primary" onclick="window.showCategoryForm()"><i class="fas fa-plus"></i> Tambah Kategori</button></div><div class="table-container"><table class="data-table"><thead><tr><th>Ikon</th><th>Nama</th><th>Jumlah Menu</th><th>Aksi</th></tr></thead><tbody id="categoryTableBody"></tbody></table></div></div>
+                    <div id="panel-inventory" class="menu-panel" style="display:none"><div class="page-header"><h2>Stok Bahan</h2><button class="btn-primary" onclick="window.showIngredientForm()"><i class="fas fa-plus"></i> Tambah Bahan</button></div><div class="stats-grid compact" id="invStats" style="grid-template-columns:repeat(4,1fr)"></div><div class="table-container"><table class="data-table"><thead><tr><th>Nama</th><th>Stok</th><th>Min</th><th>Satuan</th><th>Harga Beli</th><th>Nilai Stok</th><th>Supplier</th><th>Status</th><th>Aksi</th></tr></thead><tbody id="ingredientsTableBody"></tbody></table></div></div>
+                </div>
 
                 <!-- KAS & BANK -->
                 <div id="page-cash" class="page">
