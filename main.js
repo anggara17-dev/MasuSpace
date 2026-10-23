@@ -29,6 +29,19 @@
     let toastTimer;
 
     /* ---------- Helper ---------- */
+    const parseRp = v => Number(String(v ?? '').replace(/\D/g, '')) || 0;
+    const fmtRp = v => (Math.round(Number(v) || 0)).toLocaleString('id-ID');
+    function friendlyError(msg) { return /permission denied/i.test(msg || '') ? 'Izin database untuk akun kasir belum diatur. Minta Owner menjalankan SQL izin kasir.' : (msg || 'Gagal'); }
+    function applyBrandLogo(url) {
+        const ok = url && (url.startsWith('http') || url.startsWith('data:image'));
+        ['brandLogoSidebar', 'brandLogoLogin'].forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = ok ? `<img src="${escapeHtml(url)}" alt="">` : '<i class="fas fa-mug-hot"></i>'; });
+    }
+    async function loadBrandLogo() {
+        try {
+            const { data } = await supabase.from('app_users').select('avatar_url').eq('role', 'owner').eq('is_active', true).not('avatar_url', 'is', null).limit(1).maybeSingle();
+            if (data?.avatar_url) { try { localStorage.setItem('masuspace-logo', data.avatar_url); } catch (e) { /* kuota penuh */ } applyBrandLogo(data.avatar_url); }
+        } catch (e) { console.error(e); }
+    }
     function formatRp(num) { return 'Rp ' + Math.round(Number(num) || 0).toLocaleString('id-ID'); }
     function escapeHtml(value) {
         return String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -155,7 +168,8 @@
         document.querySelectorAll('.nav-item[data-page]').forEach(button => {
             button.style.display = button.classList.contains('owner-only') && user.role === 'kasir' ? 'none' : 'flex';
         });
-        await window.navigate('dashboard');
+        loadBrandLogo();
+        await window.navigate(user.role === 'kasir' ? 'kasir' : 'dashboard');
     }
 
     window.handleLogin = async function (e) {
@@ -286,7 +300,7 @@
         try {
             const [ordersResult, expensesResult, inventoryResult] = await Promise.all([
                 fetchOrders(rangeStart, rangeEnd, { statuses: ['paid', 'completed'], cols: 'id,total,payment_method', limit: 1000 }),
-                supabase.from('expenses').select('amount,cash_sources(name)').gte('created_at', rangeStart).lt('created_at', rangeEnd),
+                supabase.from('expenses').select('amount').gte('created_at', rangeStart).lt('created_at', rangeEnd),
                 supabase.rpc('get_inventory_summary')
             ]);
             if (requestId !== dashboardRequestId) return;
@@ -369,9 +383,10 @@
 
     async function loadKasirExpenses() {
         const from = await getShiftStart();
-        const { data } = await supabase.from('expenses').select('*, cash_sources(name)')
-            .gte('created_at', from).lt('created_at', dayEndExclusiveISO(getTodayJakarta())).order('created_at', { ascending: false });
-        state.kasirExpenses = data || [];
+        const q = sel => supabase.from('expenses').select(sel).gte('created_at', from).lt('created_at', dayEndExclusiveISO(getTodayJakarta())).order('created_at', { ascending: false });
+        let res = await q('*, cash_sources(name)');
+        if (res.error) res = await q('*'); // akun kasir tidak punya akses ke tabel cash_sources
+        state.kasirExpenses = res.data || [];
         const badge = document.getElementById('expenseCountBadge');
         if (badge) badge.innerText = state.kasirExpenses.length;
     }
@@ -395,13 +410,13 @@
         if (!e) return;
         document.getElementById('editExpenseId').value = id;
         document.getElementById('editExpenseCategory').value = e.category;
-        document.getElementById('editExpenseAmount').value = e.amount;
+        document.getElementById('editExpenseAmount').value = fmtRp(e.amount);
         document.getElementById('editExpenseModal').classList.add('active');
     };
     window.saveEditedExpense = async function () {
         const id = document.getElementById('editExpenseId').value;
         const category = document.getElementById('editExpenseCategory').value.trim();
-        const amount = parseFloat(document.getElementById('editExpenseAmount').value) || 0;
+        const amount = parseRp(document.getElementById('editExpenseAmount').value);
         if (!category || amount <= 0) { showToast('Lengkapi data!', true); return; }
         const { data, error } = await supabase.rpc('update_expense', { p_expense_id: id, p_amount: amount, p_category: category, p_description: category });
         if (error || !data?.success) { showToast('Gagal: ' + (error?.message || data?.message || 'Unknown'), true); return; }
@@ -420,13 +435,13 @@
     };
     window.quickExpense = async function () {
         const source = document.getElementById('quickExpenseSource').value;
-        const amount = parseFloat(document.getElementById('quickExpenseAmount').value) || 0;
+        const amount = parseRp(document.getElementById('quickExpenseAmount').value);
         const desc = document.getElementById('quickExpenseDesc').value.trim();
         if (!source) { showToast('Pilih sumber kas!', true); return; }
         if (amount <= 0) { showToast('Jumlah wajib!', true); return; }
         if (!desc) { showToast('Keterangan wajib!', true); return; }
         const { data, error } = await supabase.rpc('add_expense', { p_source_id: source, p_amount: amount, p_category: desc, p_description: desc, p_created_by: state.currentUser?.id || null });
-        if (error || !data?.success) { showToast('Gagal: ' + (error?.message || data?.message || 'Unknown'), true); return; }
+        if (error || !data?.success) { showToast('Gagal: ' + friendlyError(error?.message || data?.message || 'Unknown'), true); return; }
         showToast('Pengeluaran dicatat!');
         document.getElementById('quickExpenseAmount').value = '';
         document.getElementById('quickExpenseDesc').value = '';
@@ -548,7 +563,9 @@
     }
     window.applyInlineDiscount = function () {
         const type = document.getElementById('discountTypeInline').value;
-        const value = parseFloat(document.getElementById('discountValueInline').value) || 0;
+        const el = document.getElementById('discountValueInline');
+        if (type === 'fixed') el.value = el.value ? fmtRp(parseRp(el.value)) : '';
+        const value = type === 'fixed' ? parseRp(el.value) : (parseFloat(el.value) || 0);
         state.discount = type === 'none' ? { type: 'percent', value: 0 } : { type, value };
         updateTotals();
     };
@@ -582,11 +599,11 @@
         document.getElementById('cashInputSection').style.display = method === 'cash' ? 'block' : 'none';
     };
     window.calculateChange = function () {
-        state.cashReceived = parseFloat(document.getElementById('cashReceived').value) || 0;
+        state.cashReceived = parseRp(document.getElementById('cashReceived').value);
         document.getElementById('changeAmount').innerText = formatRp(Math.max(0, state.cashReceived - cartTotal()));
     };
-    window.setQuickCash = function (amount) { document.getElementById('cashReceived').value = amount; window.calculateChange(); };
-    window.setExactCash = function () { document.getElementById('cashReceived').value = cartTotal(); window.calculateChange(); };
+    window.setQuickCash = function (amount) { document.getElementById('cashReceived').value = fmtRp(amount); window.calculateChange(); };
+    window.setExactCash = function () { document.getElementById('cashReceived').value = fmtRp(cartTotal()); window.calculateChange(); };
 
     window.processPayment = async function () {
         if (!state.cart.length) return;
@@ -624,7 +641,7 @@
             loadKasirExpenses();
             setTimeout(window.showReceipt, 300);
         } catch (e) {
-            showToast('❌ ' + (e.message || 'Gagal'), true);
+            showToast('❌ ' + friendlyError(e.message), true);
         } finally {
             btn.innerText = 'Konfirmasi';
             btn.disabled = false;
@@ -713,7 +730,7 @@
         state.discount = order.discount || { type: 'percent', value: 0 };
         state.orderType = order.order_type || 'dine_in';
         document.getElementById('discountTypeInline').value = state.discount.value ? state.discount.type : 'none';
-        document.getElementById('discountValueInline').value = state.discount.value || '';
+        document.getElementById('discountValueInline').value = state.discount.type === 'fixed' && state.discount.value ? fmtRp(state.discount.value) : (state.discount.value || '');
         document.getElementById('customerName').value = order.customer_name === 'Walk-in' ? '' : (order.customer_name || '');
         document.getElementById('tableNumber').value = order.table_number || '';
         document.querySelectorAll('.type-btn').forEach((b, i) => b.classList.toggle('active', (i === 0) === (state.orderType === 'dine_in')));
@@ -750,7 +767,7 @@
         const to = new Date().toISOString();
         const [orders, expRes] = await Promise.all([
             fetchOrders(from, to, { statuses: PAID_STATUS, cols: 'id,order_number,total,payment_method,created_at', limit: 1000 }),
-            supabase.from('expenses').select('amount,category,description,created_at,cash_sources(name)').gte('created_at', from).lt('created_at', to).order('created_at')
+            supabase.from('expenses').select('amount,category,description,created_at').gte('created_at', from).lt('created_at', to).order('created_at')
         ]);
         if (expRes.error) throw expRes.error;
         const expenses = expRes.data || [];
@@ -790,7 +807,7 @@
             state.lastShift = d;
             const canClose = state.currentUser?.role === 'owner' && state.authUserId;
             const closingPanel = canClose
-                ? `<section id="cashierClosePanel" data-system="${d.cashExpected}" class="page-section" style="margin-top:18px"><h4 style="margin:0 0 8px">Tutup Kasir</h4><p style="margin:0 0 12px;color:var(--text-light)">Cash seharusnya di laci: <b>${formatRp(d.cashExpected)}</b>. Hitung uang fisik, lalu setor ke Cash Umum. Setelah ditutup, laporan lengkap (termasuk pengeluaran) bisa dicetak dan semua angka shift kembali Rp 0.</p><div class="input-group"><label>Uang fisik yang dihitung (Rp)</label><input id="cashierPhysicalCash" type="number" min="0" step="1" inputmode="numeric" placeholder="Masukkan hasil hitung fisik"></div><div class="input-group"><label>Catatan selisih (wajib bila ada selisih)</label><input id="cashierCloseNotes" type="text" maxlength="500" placeholder="Contoh: selisih karena uang kembalian"></div><button class="btn-primary" onclick="window.closeCashierShift()"><i class="fas fa-lock"></i> Tutup Kasir & Setor ke Cash Umum</button></section>`
+                ? `<section id="cashierClosePanel" data-system="${d.cashExpected}" class="page-section" style="margin-top:18px"><h4 style="margin:0 0 8px">Tutup Kasir</h4><p style="margin:0 0 12px;color:var(--text-light)">Cash seharusnya di laci: <b>${formatRp(d.cashExpected)}</b>. Hitung uang fisik, lalu setor ke Cash Umum. Setelah ditutup, laporan lengkap (termasuk pengeluaran) bisa dicetak dan semua angka shift kembali Rp 0.</p><div class="input-group"><label>Uang fisik yang dihitung (Rp)</label><input id="cashierPhysicalCash" type="text" class="rp-input" inputmode="numeric" placeholder="Masukkan hasil hitung fisik"></div><div class="input-group"><label>Catatan selisih (wajib bila ada selisih)</label><input id="cashierCloseNotes" type="text" maxlength="500" placeholder="Contoh: selisih karena uang kembalian"></div><button class="btn-primary" onclick="window.closeCashierShift()"><i class="fas fa-lock"></i> Tutup Kasir & Setor ke Cash Umum</button></section>`
                 : '<p style="margin-top:16px;font-size:12px;color:var(--text-light)">Tutup kasir dilakukan oleh Owner.</p>';
             const card = (label, val, color) => `<div class="stat-card"><div class="stat-info"><div class="stat-label">${label}</div><div class="stat-value" style="font-size:18px;${color ? 'color:' + color : ''}">${formatRp(val)}</div></div></div>`;
             const line = (label, val) => `<div style="display:flex;justify-content:space-between;padding:6px 0"><span>${label}</span><b>${formatRp(val)}</b></div>`;
@@ -829,7 +846,7 @@
         if (state.currentUser?.role !== 'owner' || !state.authUserId) { showToast('Hanya Owner yang masuk lewat Supabase Auth dapat menutup kasir.', true); return; }
         const panel = document.getElementById('cashierClosePanel');
         const field = document.getElementById('cashierPhysicalCash');
-        const physicalCash = Number(field?.value);
+        const physicalCash = parseRp(field?.value);
         if (!field || field.value.trim() === '' || !Number.isSafeInteger(physicalCash) || physicalCash < 0) { showToast('Masukkan hitung fisik dalam angka rupiah bulat.', true); return; }
         const button = panel.querySelector('button');
         button.disabled = true;
@@ -912,7 +929,7 @@
                 const menus = menuByOrder.get(o.id) || [];
                 const methodBadge = o.payment_method === 'cash' ? 'success' : o.payment_method === 'qris' ? 'info' : 'warning';
                 const statusBadge = isPaid ? 'success' : o.status === 'cancelled' ? 'danger' : 'warning';
-                return `<tr><td>${new Date(o.created_at).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', dateStyle: 'short', timeStyle: 'short' })}</td><td><span class="badge badge-info">${escapeHtml(o.order_type || '-')}</span></td><td>${escapeHtml(o.customer_name || 'Walk-in')}</td><td>${menus.join(', ') || 'Tidak ada detail menu'}</td><td><span class="badge badge-${methodBadge}">${escapeHtml((o.payment_method || '-').toUpperCase())}</span></td><td><b>${formatRp(amount)}</b></td><td><span class="badge badge-${statusBadge}">${escapeHtml(o.status || '-')}</span></td><td class="order-action-btns"><button onclick="window.viewOrderDetail('${o.id}')" title="Lihat & Cetak"><i class="fas fa-eye"></i></button><button onclick="window.editOrder('${o.id}')" title="Ubah status"><i class="fas fa-edit"></i></button><button class="delete-btn" onclick="window.deleteOrder('${o.id}')" title="Hapus"><i class="fas fa-trash"></i></button></td></tr>`;
+                return `<tr><td>${new Date(o.created_at).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', dateStyle: 'short', timeStyle: 'short' })}</td><td><span class="badge badge-info">${escapeHtml(o.order_type || '-')}</span></td><td>${escapeHtml(o.customer_name || 'Walk-in')}</td><td>${menus.join(', ') || 'Tidak ada detail menu'}</td><td><span class="badge badge-${methodBadge}">${escapeHtml((o.payment_method || '-').toUpperCase())}</span></td><td><b>${formatRp(amount)}</b></td><td><span class="badge badge-${statusBadge}">${escapeHtml(o.status || '-')}</span></td><td class="order-action-btns"><button onclick="window.viewOrderDetail('${o.id}')" title="Lihat & Cetak"><i class="fas fa-eye"></i></button><button onclick="window.editOrder('${o.id}')" title="${isPaid ? 'Order lunas terkunci' : 'Batalkan order'}" ${isPaid ? 'disabled' : ''}><i class="fas fa-edit"></i></button><button class="delete-btn" onclick="window.deleteOrder('${o.id}')" title="${isPaid ? 'Order lunas terkunci' : 'Hapus'}" ${isPaid ? 'disabled' : ''}><i class="fas fa-trash"></i></button></td></tr>`;
             }).join('');
             const card = (label, val) => `<div class="stat-card"><div class="stat-info"><div class="stat-label">${label}</div><div class="stat-value">${val}</div></div></div>`;
             document.getElementById('ordersSummary').innerHTML = `<div class="stats-grid" style="margin-bottom:16px">${card('Total Order', paidCount)}${card('Cash', formatRp(totalCash))}${card('Non-Tunai', formatRp(totalNonCash))}${card('Total Penjualan', formatRp(totalRevenue))}</div>`;
@@ -1088,7 +1105,7 @@
     };
     window.saveManualMutation = async function () {
         const sourceId = document.getElementById('addMutationSource').value;
-        const amount = parseFloat(document.getElementById('addMutationAmount').value) || 0;
+        const amount = parseRp(document.getElementById('addMutationAmount').value);
         const desc = document.getElementById('addMutationDesc').value.trim();
         if (!sourceId) { showToast('Pilih sumber kas!', true); return; }
         if (amount <= 0) { showToast('Jumlah harus lebih dari 0!', true); return; }
@@ -1114,7 +1131,7 @@
         document.getElementById('transferModal').classList.add('active');
     };
     window.processTransfer = async function () {
-        const ok = await doTransfer(document.getElementById('transferFrom').value, document.getElementById('transferTo').value, parseFloat(document.getElementById('transferAmount').value) || 0, document.getElementById('transferDesc').value.trim());
+        const ok = await doTransfer(document.getElementById('transferFrom').value, document.getElementById('transferTo').value, parseRp(document.getElementById('transferAmount').value), document.getElementById('transferDesc').value.trim());
         if (ok) { window.closeModal('transferModal'); await loadCash(); }
     };
 
@@ -1126,18 +1143,18 @@
         const content = document.getElementById('cashActionContent');
         document.getElementById('cashActionTitle').innerText = action === 'transfer' ? `Transfer dari ${src.name}` : `Hitung Fisik - ${src.name}`;
         content.innerHTML = action === 'transfer'
-            ? `<div class="input-group"><label>Ke Sumber</label><select id="cashActionTo">${sources.filter(s => s.id !== sourceId).map(s => `<option value="${s.id}">${escapeHtml(s.name)} (${formatRp(s.current_balance)})</option>`).join('')}</select></div><div class="input-group"><label>Jumlah (Rp)</label><input type="number" id="cashActionAmount" placeholder="0"></div><div class="input-group"><label>Keterangan</label><input type="text" id="cashActionDesc" placeholder="Keterangan transfer"></div><button class="add-to-cart-btn" onclick="window.processCashAction('transfer','${sourceId}')">Transfer Sekarang</button>`
-            : `<div class="input-group"><label>Saldo Sistem</label><input type="text" readonly value="${formatRp(src.current_balance)}"></div><div class="input-group"><label>Hitung Fisik (Rp)</label><input type="number" id="cashActionPhysical" placeholder="0"></div><div class="input-group"><label>Keterangan</label><input type="text" id="cashActionDesc" placeholder="Selisih otomatis dicatat"></div><button class="add-to-cart-btn" onclick="window.processCashAction('physical','${sourceId}')">Simpan</button>`;
+            ? `<div class="input-group"><label>Ke Sumber</label><select id="cashActionTo">${sources.filter(s => s.id !== sourceId).map(s => `<option value="${s.id}">${escapeHtml(s.name)} (${formatRp(s.current_balance)})</option>`).join('')}</select></div><div class="input-group"><label>Jumlah (Rp)</label><input type="text" inputmode="numeric" class="rp-input" id="cashActionAmount" placeholder="0"></div><div class="input-group"><label>Keterangan</label><input type="text" id="cashActionDesc" placeholder="Keterangan transfer"></div><button class="add-to-cart-btn" onclick="window.processCashAction('transfer','${sourceId}')">Transfer Sekarang</button>`
+            : `<div class="input-group"><label>Saldo Sistem</label><input type="text" readonly value="${formatRp(src.current_balance)}"></div><div class="input-group"><label>Hitung Fisik (Rp)</label><input type="text" inputmode="numeric" class="rp-input" id="cashActionPhysical" placeholder="0"></div><div class="input-group"><label>Keterangan</label><input type="text" id="cashActionDesc" placeholder="Selisih otomatis dicatat"></div><button class="add-to-cart-btn" onclick="window.processCashAction('physical','${sourceId}')">Simpan</button>`;
         document.getElementById('cashActionModal').classList.add('active');
     };
     window.processCashAction = async function (action, sourceId) {
         const desc = document.getElementById('cashActionDesc')?.value.trim() || '';
         if (action === 'transfer') {
-            const ok = await doTransfer(sourceId, document.getElementById('cashActionTo')?.value, parseFloat(document.getElementById('cashActionAmount')?.value) || 0, desc);
+            const ok = await doTransfer(sourceId, document.getElementById('cashActionTo')?.value, parseRp(document.getElementById('cashActionAmount')?.value), desc);
             if (!ok) return;
         } else {
             const raw = document.getElementById('cashActionPhysical')?.value;
-            const physical = Number(raw);
+            const physical = parseRp(raw);
             if (raw === '' || !Number.isFinite(physical) || physical < 0) { showToast('Masukkan hitung fisik yang valid!', true); return; }
             const { data, error } = await supabase.rpc('reconcile_cash_balance', { p_source_id: sourceId, p_physical_balance: physical, p_description: desc });
             if (error || !data?.success) { showToast('Gagal menyimpan hitung fisik: ' + (error?.message || data?.message || 'Unknown'), true); return; }
@@ -1175,12 +1192,12 @@
         if (!m) { showToast('Mutasi tidak ditemukan', true); return; }
         if (!EDITABLE_REFS.includes(m.reference_type)) { showToast('Hanya mutasi manual/adjustment yang bisa diedit', true); return; }
         document.getElementById('editMutationId').value = id;
-        document.getElementById('editMutationAmount').value = m.amount;
+        document.getElementById('editMutationAmount').value = fmtRp(m.amount);
         document.getElementById('editMutationDesc').value = m.description || '';
         document.getElementById('editMutationModal').classList.add('active');
     };
     window.saveEditedMutation = async function () {
-        const amount = parseFloat(document.getElementById('editMutationAmount').value) || 0;
+        const amount = parseRp(document.getElementById('editMutationAmount').value);
         if (amount <= 0) { showToast('Jumlah wajib!', true); return; }
         const { data, error } = await supabase.rpc('update_cash_mutation', { p_mutation_id: document.getElementById('editMutationId').value, p_new_amount: amount, p_new_description: document.getElementById('editMutationDesc').value.trim() });
         if (error || !data?.success) { showToast('Gagal: ' + (error?.message || data?.message || 'Unknown'), true); return; }
@@ -1202,7 +1219,7 @@
         const content = document.getElementById('settingsContent');
         if (tab === 'profile') {
             const u = state.currentUser;
-            content.innerHTML = `<div class="profile-section"><h3 style="margin-bottom:16px"><i class="fas fa-user-circle" style="color:var(--primary);margin-right:8px"></i>Profil Saya</h3><div class="profile-photo-section"><div class="profile-photo-preview" onclick="window.openPhotoUpload()">${u?.avatar_url && (u.avatar_url.startsWith('http') || u.avatar_url.startsWith('data:image')) ? `<img src="${escapeHtml(u.avatar_url)}" alt="Profil">` : '<i class="fas fa-user"></i>'}</div><div style="flex:1"><p style="font-size:13px;color:var(--text-light);margin-bottom:8px">Klik foto untuk upload</p><button class="btn-secondary" onclick="window.openPhotoUpload()"><i class="fas fa-camera"></i> Upload Foto</button></div></div><div class="input-group"><label>Nama Lengkap</label><input type="text" id="profileFullName" value="${escapeHtml(u?.full_name || '')}"></div><div class="input-group"><label>Password Baru</label><input type="password" id="profilePassword" placeholder="Kosongkan jika tidak diubah"></div><button class="btn-primary" onclick="window.saveProfile()"><i class="fas fa-save"></i> Simpan Profil</button></div>`;
+            content.innerHTML = `<div class="profile-section"><h3 style="margin-bottom:16px"><i class="fas fa-user-circle" style="color:var(--primary);margin-right:8px"></i>Profil Saya</h3><div class="profile-photo-section"><div class="profile-photo-preview" onclick="window.openPhotoUpload()">${u?.avatar_url && (u.avatar_url.startsWith('http') || u.avatar_url.startsWith('data:image')) ? `<img src="${escapeHtml(u.avatar_url)}" alt="Profil">` : '<i class="fas fa-user"></i>'}</div><div style="flex:1"><p style="font-size:13px;color:var(--text-light);margin-bottom:8px">Klik foto untuk upload</p><button class="btn-secondary" onclick="window.openPhotoUpload()"><i class="fas fa-camera"></i> Upload Foto</button></div></div><div class="input-group"><label>Nama Lengkap</label><input type="text" id="profileFullName" value="${escapeHtml(u?.full_name || '')}"></div><div class="input-group"><label>Password Baru</label><div class="password-wrapper"><input type="password" id="profilePassword" placeholder="Kosongkan jika tidak diubah"><button type="button" class="password-toggle" onclick="window.toggleFieldPassword('profilePassword', this)"><i class="fas fa-eye"></i></button></div></div><button class="btn-primary" onclick="window.saveProfile()"><i class="fas fa-save"></i> Simpan Profil</button></div>`;
         } else if (tab === 'users') {
             const { data } = await supabase.from('app_users').select('id, username, full_name, role').eq('is_active', true).order('full_name');
             content.innerHTML = `<div class="profile-section"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><h3><i class="fas fa-users" style="color:var(--primary);margin-right:8px"></i>Manajemen User</h3><button class="btn-primary" onclick="window.showUserForm()"><i class="fas fa-plus"></i> Tambah User</button></div><div class="user-list">${(data || []).map(u => `<div class="user-list-item"><div class="user-list-info"><div class="user-avatar">${escapeHtml(u.full_name.charAt(0).toUpperCase())}</div><div><div class="user-name">${escapeHtml(u.full_name)}</div><div class="user-role">@${escapeHtml(u.username)} • ${escapeHtml(u.role)}</div></div></div><div class="user-list-actions"><button class="btn-secondary" style="padding:6px 10px;font-size:11px" onclick="window.editUser('${u.id}')"><i class="fas fa-edit"></i></button><button class="btn-secondary" style="padding:6px 10px;font-size:11px;color:#ef4444" onclick="window.deleteUser('${u.id}')"><i class="fas fa-trash"></i></button></div></div>`).join('')}</div></div>`;
@@ -1243,7 +1260,18 @@
         if (file.size > 2 * 1024 * 1024) { showToast('Ukuran file maksimal 2MB!', true); return; }
         if (!file.type.startsWith('image/')) { showToast('Hanya file gambar!', true); return; }
         const reader = new FileReader();
-        reader.onload = e => { state.pendingPhotoBase64 = e.target.result; document.getElementById('photoUploadPreview').innerHTML = `<img src="${e.target.result}" alt="Preview">`; };
+        reader.onload = e => {
+            const img = new Image();
+            img.onload = () => {
+                const s = 256, c = document.createElement('canvas'), m = Math.min(img.width, img.height), ctx = c.getContext('2d');
+                c.width = c.height = s; ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, s, s);
+                ctx.drawImage(img, (img.width - m) / 2, (img.height - m) / 2, m, m, 0, 0, s, s);
+                const data = c.toDataURL('image/jpeg', 0.85);
+                state.pendingPhotoBase64 = data;
+                document.getElementById('photoUploadPreview').innerHTML = `<img src="${data}" alt="Preview">`;
+            };
+            img.src = e.target.result;
+        };
         reader.readAsDataURL(file);
     };
     window.saveUploadedPhoto = async function () {
@@ -1251,6 +1279,7 @@
         const { error } = await supabase.from('app_users').update({ avatar_url: state.pendingPhotoBase64 }).eq('id', state.currentUser.id);
         if (error) { showToast('Gagal: ' + error.message, true); return; }
         state.currentUser.avatar_url = state.pendingPhotoBase64;
+        if (state.currentUser.role === 'owner') { try { localStorage.setItem('masuspace-logo', state.pendingPhotoBase64); } catch (e) { /* kuota penuh */ } applyBrandLogo(state.pendingPhotoBase64); }
         setAvatar(document.getElementById('userAvatar'), state.currentUser);
         setAvatar(document.getElementById('userAvatar2'), state.currentUser);
         state.pendingPhotoBase64 = null;
@@ -1282,16 +1311,19 @@
         document.getElementById('userFormTitle').innerText = 'Tambah User';
         ['editUserId', 'editUserFullName', 'editUserUsername', 'editUserPassword'].forEach(id => { document.getElementById(id).value = ''; });
         document.getElementById('editUserRole').value = 'kasir';
+        document.getElementById('editUserPassword').type = 'password';
         document.getElementById('userFormModal').classList.add('active');
     };
     window.editUser = async function (id) {
-        const { data } = await supabase.from('app_users').select('id, username, full_name, role').eq('id', id).single();
+        const { data } = await supabase.from('app_users').select('id, username, full_name, role, password_hash').eq('id', id).single();
         if (!data) return;
         document.getElementById('userFormTitle').innerText = 'Edit User';
         document.getElementById('editUserId').value = data.id;
         document.getElementById('editUserFullName').value = data.full_name;
         document.getElementById('editUserUsername').value = data.username;
-        document.getElementById('editUserPassword').value = '';
+        // Password kasir tersimpan apa adanya, jadi bisa dilihat lewat tombol mata. Password Owner ada di Supabase Auth.
+        document.getElementById('editUserPassword').value = data.role === 'kasir' ? (data.password_hash || '') : '';
+        document.getElementById('editUserPassword').type = 'password';
         document.getElementById('editUserRole').value = data.role;
         document.getElementById('userFormModal').classList.add('active');
     };
@@ -1396,7 +1428,7 @@
     function fillProductForm(p) {
         document.getElementById('editProductId').value = p?.id || '';
         document.getElementById('editProductName').value = p?.name || '';
-        document.getElementById('editProductPrice').value = p?.base_price ?? '';
+        document.getElementById('editProductPrice').value = p ? fmtRp(p.base_price) : '';
         document.getElementById('editProductDesc').value = p?.description || '';
         document.getElementById('editProductCategory').innerHTML = '<option value="">Tanpa kategori</option>' + (state.menuCats || []).map(c => `<option value="${c.id}" ${p?.category_id === c.id ? 'selected' : ''}>${escapeHtml((c.icon || '') + ' ' + c.name)}</option>`).join('');
         document.getElementById('productFormModal').classList.add('active');
@@ -1404,8 +1436,8 @@
     window.showProductForm = () => fillProductForm(null);
     window.editProduct = id => fillProductForm((state.menuProducts || []).find(p => p.id === id));
     window.saveProduct = async function () {
-        const id = val('editProductId'), name = val('editProductName'), price = parseFloat(val('editProductPrice'));
-        if (!name || !(price >= 0)) { showToast('Nama dan harga wajib diisi!', true); return; }
+        const id = val('editProductId'), name = val('editProductName'), price = parseRp(val('editProductPrice'));
+        if (!name || val('editProductPrice') === '') { showToast('Nama dan harga wajib diisi!', true); return; }
         const row = { name, category_id: document.getElementById('editProductCategory').value || null, base_price: price, description: val('editProductDesc') };
         await runSave(id ? supabase.from('products').update({ ...row, updated_at: new Date().toISOString() }).eq('id', id) : supabase.from('products').insert({ ...row, is_active: true }), 'Menu disimpan!', 'productFormModal', loadMenuPage);
     };
@@ -1461,7 +1493,7 @@
     function fillIngredientForm(i) {
         const set = (id, v) => { document.getElementById(id).value = v; };
         set('editIngredientId', i?.id || ''); set('editIngredientName', i?.name || ''); set('editIngredientStock', i?.stock_qty ?? '');
-        set('editIngredientUnit', i?.unit || 'gram'); set('editIngredientMin', i?.min_stock ?? ''); set('editIngredientPrice', i?.buy_price ?? ''); set('editIngredientSupplier', i?.supplier || '');
+        set('editIngredientUnit', i?.unit || 'gram'); set('editIngredientMin', i?.min_stock ?? ''); set('editIngredientPrice', i ? fmtRp(i.buy_price) : ''); set('editIngredientSupplier', i?.supplier || '');
         document.getElementById('ingredientFormModal').classList.add('active');
     }
     window.showIngredientForm = () => fillIngredientForm(null);
@@ -1470,7 +1502,7 @@
         const id = val('editIngredientId'), name = val('editIngredientName');
         if (!name) { showToast('Nama bahan wajib!', true); return; }
         const n = f => parseFloat(val(f)) || 0;
-        const row = { name, stock_qty: n('editIngredientStock'), unit: val('editIngredientUnit') || 'gram', min_stock: n('editIngredientMin'), buy_price: n('editIngredientPrice'), supplier: val('editIngredientSupplier') };
+        const row = { name, stock_qty: n('editIngredientStock'), unit: val('editIngredientUnit') || 'gram', min_stock: n('editIngredientMin'), buy_price: parseRp(val('editIngredientPrice')), supplier: val('editIngredientSupplier') };
         await runSave(id ? supabase.from('ingredients').update({ ...row, updated_at: new Date().toISOString() }).eq('id', id) : supabase.from('ingredients').insert({ ...row, is_active: true }), 'Bahan disimpan!', 'ingredientFormModal', loadInventoryPage);
     };
     window.deleteIngredient = async function (id) {
@@ -1503,10 +1535,20 @@
     };
 
     /* ---------- Modal & start ---------- */
+    document.addEventListener('input', e => {
+        const el = e.target;
+        if (el.classList && el.classList.contains('rp-input')) { const d = el.value.replace(/\D/g, ''); el.value = d ? Number(d).toLocaleString('id-ID') : ''; }
+    });
+    window.toggleFieldPassword = function (id, btn) {
+        const input = document.getElementById(id), show = input.type === 'password';
+        input.type = show ? 'text' : 'password';
+        const icon = btn.querySelector('i'); icon.classList.toggle('fa-eye', !show); icon.classList.toggle('fa-eye-slash', show);
+    };
     window.closeModal = function (id) { document.getElementById(id)?.classList.remove('active'); };
     document.addEventListener('click', e => { if (e.target.classList.contains('modal-overlay') && !e.target.classList.contains('no-dismiss')) e.target.classList.remove('active'); });
 
     document.addEventListener('DOMContentLoaded', function () {
+        applyBrandLogo(localStorage.getItem('masuspace-logo'));
         loadUsersToDropdown();
         if (!RECOVERY_LINK) window.restoreOwnerSession();
         // Hapus isian password otomatis dari browser (autofill muncul sedikit terlambat)
