@@ -368,9 +368,9 @@
     }
 
     async function loadKasirExpenses() {
-        const today = getTodayJakarta();
+        const from = await getShiftStart();
         const { data } = await supabase.from('expenses').select('*, cash_sources(name)')
-            .gte('created_at', dayStartISO(today)).lt('created_at', dayEndExclusiveISO(today)).order('created_at', { ascending: false });
+            .gte('created_at', from).lt('created_at', dayEndExclusiveISO(getTodayJakarta())).order('created_at', { ascending: false });
         state.kasirExpenses = data || [];
         const badge = document.getElementById('expenseCountBadge');
         if (badge) badge.innerText = state.kasirExpenses.length;
@@ -380,13 +380,13 @@
     window.showExpenseHistoryModal = function () {
         const content = document.getElementById('expenseHistoryContent');
         if (!state.kasirExpenses.length) {
-            content.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-light)"><i class="fas fa-receipt" style="font-size:48px;margin-bottom:12px;opacity:.3"></i><p>Belum ada pengeluaran hari ini</p></div>';
+            content.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-light)"><i class="fas fa-receipt" style="font-size:48px;margin-bottom:12px;opacity:.3"></i><p>Belum ada pengeluaran di shift ini</p></div>';
         } else {
             let total = 0;
             content.innerHTML = state.kasirExpenses.map(e => {
                 total += Number(e.amount || 0);
                 return `<div class="expense-history-modal-item"><div class="exp-info"><div class="exp-cat">${escapeHtml(e.category)}</div><div class="exp-desc">${escapeHtml(e.description || '-')}</div><div class="exp-time">${new Date(e.created_at).toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta' })} • ${escapeHtml(e.cash_sources?.name || '-')}</div></div><div class="exp-amount">-${formatRp(e.amount)}</div><div class="exp-actions"><button onclick="window.editExpense('${e.id}')" title="Edit"><i class="fas fa-edit"></i></button><button class="delete-exp-btn" onclick="window.deleteExpense('${e.id}')" title="Hapus"><i class="fas fa-trash"></i></button></div></div>`;
-            }).join('') + `<div style="margin-top:16px;padding:12px;background:var(--primary-light);border-radius:8px;display:flex;justify-content:space-between;font-weight:700"><span>Total Pengeluaran Hari Ini</span><span style="color:var(--primary-dark)">${formatRp(total)}</span></div>`;
+            }).join('') + `<div style="margin-top:16px;padding:12px;background:var(--primary-light);border-radius:8px;display:flex;justify-content:space-between;font-weight:700"><span>Total Pengeluaran Shift Ini</span><span style="color:var(--primary-dark)">${formatRp(total)}</span></div>`;
         }
         document.getElementById('expenseHistoryModal').classList.add('active');
     };
@@ -734,6 +734,13 @@
    ===================================================================== */
 
     /* ---------- Laporan harian + tutup kasir ---------- */
+    // Awal shift berjalan: tutup kasir terakhir hari ini, atau awal hari
+    async function getShiftStart() {
+        const dayStart = dayStartISO(getTodayJakarta());
+        const closedAt = await getLastClosedAt();
+        return new Date(closedAt && new Date(closedAt) > new Date(dayStart) ? closedAt : dayStart).toISOString();
+    }
+
     // Data satu shift: sejak tutup kasir terakhir (atau awal hari) sampai sekarang
     async function getShiftData() {
         const dayStart = dayStartISO(getTodayJakarta());
@@ -863,6 +870,7 @@
             document.getElementById('receiptModal').classList.add('active');
             if (!markError) showToast('Kasir ditutup. Klik Print untuk mencetak laporan.');
             if (state.currentPage === 'dashboard') loadDashboard();
+            loadKasirExpenses(); // riwayat pengeluaran kasir ikut kembali kosong
         } catch (error) {
             console.error('Tutup kasir gagal:', error);
             showToast('Tutup kasir gagal: ' + (error.message || 'Unknown'), true);
