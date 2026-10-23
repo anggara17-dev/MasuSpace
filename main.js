@@ -245,7 +245,7 @@
     });
 
     /* ---------- Navigasi ---------- */
-    const PAGE_TITLES = { dashboard: 'Dashboard', kasir: 'Kasir POS', orders: 'Riwayat Order', menu: 'Menu', categories: 'Kategori', inventory: 'Stok', cash: 'Kas & Bank', reports: 'Laporan', settings: 'Pengaturan' };
+    const PAGE_TITLES = { dashboard: 'Dashboard', kasir: 'Kasir POS', orders: 'Riwayat Order', menu: 'Menu & Stok', cash: 'Kas & Bank', reports: 'Laporan', settings: 'Pengaturan' };
     window.navigate = async function (page) {
         if (!PAGE_TITLES[page]) return false;
         if (state.currentUser?.role === 'kasir' && OWNER_ONLY_PAGES.includes(page)) { showToast('Halaman ini khusus Owner.', true); return false; }
@@ -254,7 +254,7 @@
         document.getElementById(`page-${page}`)?.classList.add('active');
         document.querySelectorAll('.nav-item[data-page]').forEach(n => n.classList.toggle('active', n.dataset.page === page));
         document.getElementById('pageTitle').innerText = PAGE_TITLES[page];
-        const loaders = { dashboard: loadDashboard, kasir: loadKasirData, orders: loadOrders, menu: loadMenuPage, categories: loadCategoriesPage, inventory: loadInventoryPage, cash: loadCash, reports: loadReports, settings: loadSettings };
+        const loaders = { dashboard: loadDashboard, kasir: loadKasirData, orders: loadOrders, menu: loadMenuHub, cash: loadCash, reports: loadReports, settings: loadSettings };
         try { await loaders[page](); } catch (error) { console.error(error); showToast('Gagal memuat halaman: ' + error.message, true); }
         if (window.innerWidth <= 1024) document.getElementById('sidebar').classList.add('collapsed');
         window.closeUserMenu();
@@ -1370,6 +1370,18 @@
         if (error) { showToast('Gagal: ' + error.message, true); return; }
         showToast(okMsg); window.closeModal(closeId); refreshKasirCache(); await reload();
     }
+
+    async function loadMenuHub() {
+        const tab = state.menuTab || 'menu';
+        document.querySelectorAll('.menu-panel').forEach(p => { p.style.display = p.id === 'panel-' + tab ? '' : 'none'; });
+        await ({ menu: loadMenuPage, categories: loadCategoriesPage, inventory: loadInventoryPage })[tab]();
+    }
+    window.switchMenuTab = function (tab, btn) {
+        state.menuTab = tab;
+        document.querySelectorAll('#page-menu > .tabs .tab').forEach(t => t.classList.remove('active'));
+        btn.classList.add('active');
+        loadMenuHub().catch(e => showToast('Gagal memuat: ' + e.message, true));
+    };
 
     async function loadMenuPage() {
         const [cats, prods] = await Promise.all([
