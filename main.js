@@ -645,6 +645,7 @@
     window.showReceipt = function () {
         const r = state.currentReceipt;
         if (!r) return;
+        document.querySelector('#receiptModal h2').innerText = 'Struk';
         document.getElementById('receiptContent').innerHTML = receiptHtml({
             dateLabel: getJakartaDate(), number: r.order_number,
             items: r.items.map(i => ({ name: i.name, qty: i.qty, unit_price: i.unit_price, detail: (i.variant_suhu || '') + '/' + (i.variant_ukuran || '') })),
@@ -733,43 +734,69 @@
    ===================================================================== */
 
     /* ---------- Laporan harian + tutup kasir ---------- */
+    // Data satu shift: sejak tutup kasir terakhir (atau awal hari) sampai sekarang
+    async function getShiftData() {
+        const dayStart = dayStartISO(getTodayJakarta());
+        const closedAt = await getLastClosedAt();
+        const fromMs = closedAt && new Date(closedAt) > new Date(dayStart) ? new Date(closedAt).getTime() : new Date(dayStart).getTime();
+        const from = new Date(fromMs).toISOString();
+        const to = new Date().toISOString();
+        const [orders, expRes] = await Promise.all([
+            fetchOrders(from, to, { statuses: PAID_STATUS, cols: 'id,order_number,total,payment_method,created_at', limit: 1000 }),
+            supabase.from('expenses').select('amount,category,description,created_at,cash_sources(name)').gte('created_at', from).lt('created_at', to).order('created_at')
+        ]);
+        if (expRes.error) throw expRes.error;
+        const expenses = expRes.data || [];
+        const sum = (list, fn) => list.reduce((t, x) => t + Number(fn(x) || 0), 0);
+        const totalRevenue = sum(orders, o => o.total);
+        const qris = sum(orders.filter(o => o.payment_method === 'qris'), o => o.total);
+        const debit = sum(orders.filter(o => o.payment_method === 'debit'), o => o.total);
+        const totalExpenses = sum(expenses, x => x.amount);
+        const cashSales = totalRevenue - qris - debit;
+        const menu = new Map();
+        orders.forEach(o => (o.order_items || []).forEach(i => { const n = i.products?.name || 'Menu'; menu.set(n, (menu.get(n) || 0) + Number(i.qty || 0)); }));
+        return { from, to, afterClose: fromMs > new Date(dayStart).getTime(), orders, expenses, menu: [...menu.entries()].sort((x, y) => y[1] - x[1]), totalRevenue, qris, debit, cashSales, totalExpenses, cashExpected: cashSales - totalExpenses };
+    }
+
+    // Struk laporan shift / tutup kasir (dipakai untuk layar dan cetak)
+    function shiftReceiptHtml(d, close) {
+        const t = iso => new Date(iso).toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit' });
+        const row = (l, v, bold) => `<div class="receipt-item"${bold ? ' style="font-weight:700"' : ''}><span>${l}</span><span>${v}</span></div>`;
+        const head = txt => `<div style="margin:10px 0 4px;padding-top:6px;border-top:1px dashed #999;font-weight:700">${txt}</div>`;
+        return `<div class="receipt-header"><h3>☕ MASUSPACE</h3><p>${close ? 'LAPORAN TUTUP KASIR' : 'LAPORAN SHIFT (BELUM DITUTUP)'}</p><p style="font-size:10px">${new Date(d.to).toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta', dateStyle: 'full' })}</p><p style="font-size:10px">Shift ${t(d.from)} - ${t(d.to)} WIB</p><p style="font-size:10px">Oleh: ${escapeHtml(state.currentUser?.full_name || '-')}</p></div>`
+            + head('PENJUALAN') + row('Jumlah order', d.orders.length) + row('Total penjualan', formatRp(d.totalRevenue), true)
+            + head('PEMBAYARAN') + row('Cash', formatRp(d.cashSales)) + row('QRIS', formatRp(d.qris)) + row('Debit', formatRp(d.debit))
+            + head('MENU TERJUAL') + (d.menu.length ? d.menu.map(([n, q]) => row(escapeHtml(n), '× ' + q)).join('') : row('-', ''))
+            + head('PENGELUARAN') + (d.expenses.length ? d.expenses.map(x => row(`${t(x.created_at)} ${escapeHtml(x.description || x.category || '-')}`, '-' + formatRp(x.amount))).join('') : row('Tidak ada pengeluaran', '')) + row('Total pengeluaran', '-' + formatRp(d.totalExpenses), true)
+            + head('RINGKASAN CASH') + row('Total penjualan', formatRp(d.totalRevenue)) + row('QRIS + Debit', '-' + formatRp(d.qris + d.debit)) + row('Pengeluaran', '-' + formatRp(d.totalExpenses)) + row('Cash seharusnya', formatRp(d.cashExpected), true)
+            + (close ? row('Uang fisik', formatRp(close.physical), true) + row('Selisih', formatRp(close.diff), true) + (close.notes ? `<p style="font-size:10px;margin-top:4px">Catatan: ${escapeHtml(close.notes)}</p>` : '') + `<p style="font-size:10px;margin-top:6px">Disetor ke Cash Umum: ${formatRp(close.physical)}. Shift baru mulai dari Rp 0.</p>` : '')
+            + '<div style="display:flex;justify-content:space-between;margin-top:28px;font-size:10px;text-align:center"><div>Kasir<br><br><br>(__________)</div><div>Owner<br><br><br>(__________)</div></div>';
+    }
+    window.printShiftReport = function () { if (state.lastShift) printHtml(shiftReceiptHtml(state.lastShift, null)); };
+
     window.showDailyReport = async function () {
-        const today = getTodayJakarta();
-        const dayStart = dayStartISO(today);
-        const dayEnd = dayEndExclusiveISO(today);
         const content = document.getElementById('dailyReportContent');
         content.innerHTML = '<div style="text-align:center;padding:20px">Memuat...</div>';
         document.getElementById('dailyReportModal').classList.add('active');
         try {
-            // Shift berjalan = sejak tutup kasir terakhir hari ini (atau awal hari). Setelah tutup kasir semua angka kembali 0.
-            const closedAt = await getLastClosedAt();
-            const from = closedAt && new Date(closedAt) > new Date(dayStart) ? new Date(closedAt).toISOString() : dayStart;
-            const [orders, expRes] = await Promise.all([
-                fetchOrders(from, dayEnd, { statuses: PAID_STATUS, cols: 'id,total,payment_method', limit: 1000 }),
-                supabase.from('expenses').select('amount').gte('created_at', from).lt('created_at', dayEnd)
-            ]);
-            if (expRes.error) throw expRes.error;
-            const sum = (list, fn) => list.reduce((t, x) => t + Number(fn(x) || 0), 0);
-            const totalRevenue = sum(orders, o => o.total);
-            const qris = sum(orders.filter(o => o.payment_method === 'qris'), o => o.total);
-            const debit = sum(orders.filter(o => o.payment_method === 'debit'), o => o.total);
-            const totalExpenses = sum(expRes.data || [], x => x.amount);
-            const cashSales = totalRevenue - qris - debit;
-            const cashExpected = cashSales - totalExpenses; // Cash Kasir = Penjualan - QRIS - Debit - Pengeluaran
-
+            const d = await getShiftData();
+            state.lastShift = d;
             const canClose = state.currentUser?.role === 'owner' && state.authUserId;
             const closingPanel = canClose
-                ? `<section id="cashierClosePanel" data-system="${cashExpected}" class="page-section" style="margin-top:18px"><h4 style="margin:0 0 8px">Tutup Kasir</h4><p style="margin:0 0 12px;color:var(--text-light)">Cash seharusnya di laci: <b>${formatRp(cashExpected)}</b>. Hitung uang fisik, lalu setor ke Cash Umum. Setelah ditutup, semua angka shift kembali Rp 0.</p><div class="input-group"><label>Uang fisik yang dihitung (Rp)</label><input id="cashierPhysicalCash" type="number" min="0" step="1" inputmode="numeric" placeholder="Masukkan hasil hitung fisik"></div><div class="input-group"><label>Catatan selisih (wajib bila ada selisih)</label><input id="cashierCloseNotes" type="text" maxlength="500" placeholder="Contoh: selisih karena uang kembalian"></div><button class="btn-primary" onclick="window.closeCashierShift()"><i class="fas fa-lock"></i> Tutup Kasir & Setor ke Cash Umum</button></section>`
+                ? `<section id="cashierClosePanel" data-system="${d.cashExpected}" class="page-section" style="margin-top:18px"><h4 style="margin:0 0 8px">Tutup Kasir</h4><p style="margin:0 0 12px;color:var(--text-light)">Cash seharusnya di laci: <b>${formatRp(d.cashExpected)}</b>. Hitung uang fisik, lalu setor ke Cash Umum. Setelah ditutup, laporan lengkap (termasuk pengeluaran) bisa dicetak dan semua angka shift kembali Rp 0.</p><div class="input-group"><label>Uang fisik yang dihitung (Rp)</label><input id="cashierPhysicalCash" type="number" min="0" step="1" inputmode="numeric" placeholder="Masukkan hasil hitung fisik"></div><div class="input-group"><label>Catatan selisih (wajib bila ada selisih)</label><input id="cashierCloseNotes" type="text" maxlength="500" placeholder="Contoh: selisih karena uang kembalian"></div><button class="btn-primary" onclick="window.closeCashierShift()"><i class="fas fa-lock"></i> Tutup Kasir & Setor ke Cash Umum</button></section>`
                 : '<p style="margin-top:16px;font-size:12px;color:var(--text-light)">Tutup kasir dilakukan oleh Owner.</p>';
-            const orderList = orders.map(o => `<div style="display:flex;justify-content:space-between;gap:12px;padding:8px;border-bottom:1px solid var(--border);font-size:12px"><span>${(o.order_items || []).map(i => escapeHtml(i.products?.name || 'Menu') + ' × ' + Number(i.qty || 0)).join(', ') || 'Tidak ada detail menu'}</span><b>${formatRp(o.total)}</b></div>`).join('');
             const card = (label, val, color) => `<div class="stat-card"><div class="stat-info"><div class="stat-label">${label}</div><div class="stat-value" style="font-size:18px;${color ? 'color:' + color : ''}">${formatRp(val)}</div></div></div>`;
             const line = (label, val) => `<div style="display:flex;justify-content:space-between;padding:6px 0"><span>${label}</span><b>${formatRp(val)}</b></div>`;
+            const box = inner => `<div style="max-height:170px;overflow-y:auto;border:1px solid var(--border);border-radius:8px">${inner}</div>`;
+            const li = (l, r, color) => `<div style="display:flex;justify-content:space-between;gap:12px;padding:8px 10px;border-bottom:1px solid var(--border);font-size:12px"><span>${l}</span><b style="${color ? 'color:' + color : ''}">${r}</b></div>`;
+            const hhmm = iso => new Date(iso).toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit' });
             content.innerHTML =
-                `<p style="font-size:12px;color:var(--text-light);margin-bottom:12px">Shift sejak ${new Date(from).toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit' })} WIB${closedAt && from !== dayStart ? ' (setelah tutup kasir terakhir)' : ''}</p>` +
-                `<div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr));gap:10px;margin-bottom:16px">${card('TOTAL PENJUALAN', totalRevenue)}${card('QRIS + DEBIT', qris + debit)}${card('TOTAL PENGELUARAN', totalExpenses, '#ef4444')}${card('CASH KASIR', cashExpected, cashExpected >= 0 ? 'var(--primary)' : '#ef4444')}</div>` +
-                `<p style="font-size:11px;color:var(--text-light);margin:-8px 0 12px">Cash Kasir = Penjualan − QRIS − Debit − Pengeluaran</p>` +
-                `<h4 style="margin:16px 0 10px">Pembayaran</h4><div style="background:var(--bg);padding:12px;border-radius:8px">${line('Cash', cashSales)}${line('QRIS', qris)}${line('Debit', debit)}</div>` +
-                `<h4 style="margin:16px 0 10px">Menu Terjual</h4><div style="max-height:200px;overflow-y:auto">${orderList || '<p style="color:var(--text-light);text-align:center;padding:20px">Belum ada penjualan</p>'}</div>` + closingPanel;
+                `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px"><span style="font-size:12px;color:var(--text-light)">Shift sejak ${hhmm(d.from)} WIB${d.afterClose ? ' (setelah tutup kasir terakhir)' : ''}</span><button class="btn-secondary" onclick="window.printShiftReport()"><i class="fas fa-print"></i> Cetak</button></div>` +
+                `<div class="stats-grid" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr));gap:10px;margin-bottom:8px">${card('TOTAL PENJUALAN', d.totalRevenue)}${card('QRIS + DEBIT', d.qris + d.debit)}${card('TOTAL PENGELUARAN', d.totalExpenses, '#ef4444')}${card('CASH KASIR', d.cashExpected, d.cashExpected >= 0 ? 'var(--primary)' : '#ef4444')}</div>` +
+                `<p style="font-size:11px;color:var(--text-light);margin-bottom:12px">Cash Kasir = Penjualan − QRIS − Debit − Pengeluaran</p>` +
+                `<h4 style="margin:12px 0 8px">Pembayaran</h4><div style="background:var(--bg);padding:10px 12px;border-radius:8px">${line('Cash', d.cashSales)}${line('QRIS', d.qris)}${line('Debit', d.debit)}</div>` +
+                `<h4 style="margin:14px 0 8px">Menu Terjual</h4>${box(d.menu.length ? d.menu.map(([n, q]) => li(escapeHtml(n), '× ' + q)).join('') : '<p style="color:var(--text-light);text-align:center;padding:14px">Belum ada penjualan</p>')}` +
+                `<h4 style="margin:14px 0 8px">Pengeluaran</h4>${box(d.expenses.length ? d.expenses.map(x => li(`${hhmm(x.created_at)} · ${escapeHtml(x.description || x.category || '-')}`, '-' + formatRp(x.amount), '#ef4444')).join('') : '<p style="color:var(--text-light);text-align:center;padding:14px">Tidak ada pengeluaran</p>')}` + closingPanel;
         } catch (error) {
             content.innerHTML = '<p style="color:#ef4444;text-align:center">Gagal memuat: ' + escapeHtml(error.message) + '</p>';
         }
@@ -797,41 +824,49 @@
         const field = document.getElementById('cashierPhysicalCash');
         const physicalCash = Number(field?.value);
         if (!field || field.value.trim() === '' || !Number.isSafeInteger(physicalCash) || physicalCash < 0) { showToast('Masukkan hitung fisik dalam angka rupiah bulat.', true); return; }
-        const system = Number(panel?.dataset.system || 0);
-        const diff = physicalCash - system;
-        const notes = document.getElementById('cashierCloseNotes')?.value.trim() || '';
-        if (system <= 0 && physicalCash <= 0) { showToast('Tidak ada saldo Cash Kasir untuk ditutup.', true); return; }
-        if (diff !== 0 && !notes) { showToast('Ada selisih ' + formatRp(diff) + '. Isi catatan selisih dulu.', true); return; }
-        const row = (l, v, c) => `<div style="display:flex;justify-content:space-between;padding:6px 0"><span>${l}</span><b style="${c ? 'color:' + c : ''}">${v}</b></div>`;
-        const okClose = await confirmDialog(
-            `<div style="text-align:left;background:var(--bg);padding:10px 14px;border-radius:10px;margin-bottom:8px">${row('Cash seharusnya', formatRp(system))}${row('Uang fisik', formatRp(physicalCash))}${row('Selisih', formatRp(diff), diff === 0 ? 'var(--primary-dark)' : '#ef4444')}</div>Uang fisik disetor ke Cash Umum dan shift baru mulai dari Rp 0.`,
-            { title: 'Tutup kasir sekarang?', okText: 'Tutup Kasir', html: true });
-        if (!okClose) return;
         const button = panel.querySelector('button');
         button.disabled = true;
-        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Memproses...';
         try {
+            // Ambil data terbaru; bila ada transaksi/pengeluaran baru sejak laporan dibuka, minta hitung ulang
+            const snap = await getShiftData();
+            const system = snap.cashExpected;
+            if (system !== Number(panel.dataset.system)) { showToast('Ada transaksi atau pengeluaran baru. Laporan dimuat ulang, hitung ulang uang fisik.', true); await window.showDailyReport(); return; }
+            const diff = physicalCash - system;
+            const notes = document.getElementById('cashierCloseNotes')?.value.trim() || '';
+            if (system <= 0 && physicalCash <= 0) { showToast('Tidak ada saldo Cash Kasir untuk ditutup.', true); return; }
+            if (diff !== 0 && !notes) { showToast('Ada selisih ' + formatRp(diff) + '. Isi catatan selisih dulu.', true); return; }
+            const row = (l, v, c) => `<div style="display:flex;justify-content:space-between;padding:6px 0"><span>${l}</span><b style="${c ? 'color:' + c : ''}">${v}</b></div>`;
+            const okClose = await confirmDialog(
+                `<div style="text-align:left;background:var(--bg);padding:10px 14px;border-radius:10px;margin-bottom:8px">${row('Cash seharusnya', formatRp(system))}${row('Uang fisik', formatRp(physicalCash))}${row('Selisih', formatRp(diff), diff === 0 ? 'var(--primary-dark)' : '#ef4444')}</div>Uang fisik disetor ke Cash Umum dan shift baru mulai dari Rp 0.`,
+                { title: 'Tutup kasir sekarang?', okText: 'Tutup Kasir', html: true });
+            if (!okClose) return;
+            button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Memproses...';
             const fullNotes = `Seharusnya ${system} | Fisik ${physicalCash} | Selisih ${diff}` + (notes ? ' | ' + notes : '');
             const res = await supabase.rpc('close_cashier_shift', { p_physical_cash: physicalCash, p_notes: fullNotes });
             const dbBroken = res.error && /does not exist|column|relation|function/i.test(res.error.message || '');
             if (dbBroken) {
-                // Fungsi database bermasalah: tutup kasir lewat penyesuaian saldo + setoran (fungsi Kas & Bank yang sudah ada)
                 console.warn('close_cashier_shift bermasalah, memakai jalur manual:', res.error);
                 await closeShiftManually(physicalCash, fullNotes);
             } else {
                 if (res.error) throw res.error;
                 if (!res.data?.success) throw new Error(res.data?.message || 'Penutupan kasir gagal.');
             }
-            const marker = { last_closed_at: new Date().toISOString(), expected: system, physical: physicalCash, difference: diff, closed_by: state.currentUser?.full_name || '' };
+            // Penanda shift = batas waktu data laporan ini, supaya tidak ada transaksi yang terlewat
+            const marker = { last_closed_at: snap.to, expected: system, physical: physicalCash, difference: diff, closed_by: state.currentUser?.full_name || '' };
             localStorage.setItem('masuspace-last-closed', marker.last_closed_at);
             const { error: markError } = await supabase.rpc('save_setting', { p_key: 'cashier_shift', p_value: marker });
             if (markError) showToast('Kasir ditutup, tetapi penanda shift gagal disimpan: ' + markError.message, true);
-            else showToast('Kasir ditutup; shift baru dimulai dari Rp 0.');
-            await window.showDailyReport();
+            // Tampilkan laporan tutup kasir lengkap (termasuk pengeluaran) dan siap cetak
+            document.getElementById('receiptContent').innerHTML = shiftReceiptHtml(snap, { physical: physicalCash, diff, notes });
+            document.querySelector('#receiptModal h2').innerText = 'Laporan Tutup Kasir';
+            window.closeModal('dailyReportModal');
+            document.getElementById('receiptModal').classList.add('active');
+            if (!markError) showToast('Kasir ditutup. Klik Print untuk mencetak laporan.');
             if (state.currentPage === 'dashboard') loadDashboard();
         } catch (error) {
             console.error('Tutup kasir gagal:', error);
             showToast('Tutup kasir gagal: ' + (error.message || 'Unknown'), true);
+        } finally {
             button.disabled = false;
             button.innerHTML = '<i class="fas fa-lock"></i> Tutup Kasir & Setor ke Cash Umum';
         }
