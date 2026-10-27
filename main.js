@@ -22,7 +22,10 @@
         modalProduct: null, modalQty: 1,
         paymentMethod: 'cash', cashReceived: 0, discount: { type: 'percent', value: 0 },
         orderType: 'dine_in', currentReceipt: null, kasirExpenses: [], pendingPhotoBase64: null,
-        printer: { type: null, device: null, name: null, vendorId: null, productId: null, id: null }
+        printers: {
+            bill: { type: null, device: null, name: null, vendorId: null, productId: null, id: null },
+            checker: { type: null, device: null, name: null, vendorId: null, productId: null, id: null }
+        }
     };
     let dashboardRequestId = 0, dashboardFilterTimer;
     let orderRequestId = 0, orderFilterTimer;
@@ -635,65 +638,6 @@
         w.print();
     }
 
-    /* ---------- ESC/POS builder untuk thermal printer ---------- */
-    // Konversi data struk (format receiptHtml) jadi string ESC/POS 58mm (32 kolom)
-    function buildEscPosText(r) {
-        const W = 32; // lebar kertas 58mm
-        const center = t => {
-            const pad = Math.max(0, (W - t.length) / 2 | 0);
-            return ' '.repeat(pad) + t;
-        };
-        const right = t => ' '.repeat(Math.max(0, W - t.length)) + t;
-        // wrap item name + price (kolom kiri 20, kanan 12)
-        const line = (a, b) => {
-            const maxA = W - b.length - 1;
-            const aa = a.length > maxA ? a.slice(0, maxA) : a;
-            return aa + ' ' + right(b);
-        };
-        let out = '';
-        out += '\x1B\x40'; // init
-        out += '\x1B\x21\x30'; // double width+height
-        out += center('MASUSPACE') + '\n';
-        out += '\x1B\x21\x00'; // normal
-        out += center('Coffee Shop') + '\n';
-        out += center(r.dateLabel) + '\n';
-        out += center(r.number) + '\n';
-        if (r.extraHeader) out += r.extraHeader; // sudah ada \n di tiap baris
-        out += '-'.repeat(W) + '\n';
-        r.items.forEach(i => {
-            out += `${i.name} x${i.qty}\n`;
-            out += line('  ' + (i.detail ? i.detail.slice(0, 18) : formatRp(i.unit_price)), formatRp(i.unit_price * i.qty)) + '\n';
-        });
-        out += '-'.repeat(W) + '\n';
-        out += line('Subtotal', formatRp(r.subtotal)) + '\n';
-        if (r.discount > 0) out += line('Diskon', '-' + formatRp(r.discount)) + '\n';
-        out += '\x1B\x21\x20'; // double width
-        out += line('TOTAL', formatRp(r.total)) + '\n';
-        out += '\x1B\x21\x00'; // normal
-        out += line('Bayar (' + String(r.method).toUpperCase() + ')', formatRp(r.paid)) + '\n';
-        if (r.method === 'cash') out += line('Kembali', formatRp(r.change)) + '\n';
-        out += '-'.repeat(W) + '\n';
-        out += center('Terima kasih!') + '\n';
-        out += center('Selamat menikmati') + '\n';
-        out += '\x1B\x64\x03'; // feed 3 lines
-        out += '\x1D\x56\x00'; // full cut
-        return out;
-    }
-
-    // Cetak struk: kalau printer thermal terhubung → kirim ESC/POS; kalau tidak → fallback browser print
-    async function printReceiptToEither(receiptData, fallbackContentSelector) {
-        if (window.isThermalPrinterConnected && window.isThermalPrinterConnected()) {
-            try {
-                const ok = await window.printToThermalPrinter(buildEscPosText(receiptData));
-                if (ok) {
-                    showToast('Struk dicetak ke ' + window.getPrinterName());
-                    return;
-                }
-            } catch (e) { console.error('Thermal print gagal, fallback ke browser:', e); }
-        }
-        // Fallback: print browser popup
-        printHtml(document.querySelector(fallbackContentSelector).innerHTML);
-    }
     window.showReceipt = function () {
         const r = state.currentReceipt;
         if (!r) return;
@@ -712,7 +656,10 @@
             dateLabel: getJakartaDate(), number: r.order_number,
             items: r.items.map(i => ({ name: i.name, qty: i.qty, unit_price: i.unit_price, detail: i.notes || '' })),
             subtotal: r.subtotal, discount: r.discount, total: r.total,
-            method: r.payment_method, paid: r.cash_received, change: r.change
+            method: r.payment_method, paid: r.cash_received, change: r.change,
+            // Untuk checker/dapur:
+            orderType: state.orderType,
+            customer: document.getElementById('customerName')?.value.trim() || r.customer_name || 'Walk-in'
         };
         printReceiptToEither(receiptData, '#receiptContent');
     };
@@ -841,7 +788,29 @@
             + (close ? row('Uang fisik', formatRp(close.physical), true) + row('Selisih', formatRp(close.diff), true) + (close.notes ? `<p style="font-size:10px;margin-top:4px">Catatan: ${escapeHtml(close.notes)}</p>` : '') + `<p style="font-size:10px;margin-top:6px">Disetor ke Cash Umum: ${formatRp(close.physical)}. Shift baru mulai dari Rp 0.</p>` : '')
             + '<div style="display:flex;justify-content:space-between;margin-top:28px;font-size:10px;text-align:center"><div>Kasir<br><br><br>(__________)</div><div>Owner<br><br><br>(__________)</div></div>';
     }
-    window.printShiftReport = function () { if (state.lastShift) printHtml(shiftReceiptHtml(state.lastShift, null)); };
+    window.printShiftReport = async function () {
+        if (!state.lastShift) return;
+        // Kalau printer bill terhubung → kirim ke thermal; kalau tidak → fallback browser
+        if (state.printers?.bill?.device) {
+            const ok = await rawSend('bill', buildShiftCloseEscPosText(state.lastShift, null));
+            if (ok) { showToast('Laporan shift dicetak ke ' + state.printers.bill.name); return; }
+            console.warn('Thermal print gagal, fallback ke browser.');
+        }
+        printHtml(shiftReceiptHtml(state.lastShift, null));
+    };
+
+    // Cetak ringkasan tutup kasir ke thermal printer (dipanggil otomatis setelah closeCashierShift sukses)
+    async function printShiftCloseThermal(snap, closeInfo) {
+        if (!state.printers?.bill?.device) return false;
+        try {
+            const ok = await rawSend('bill', buildShiftCloseEscPosText(snap, closeInfo));
+            if (ok) {
+                showToast('Laporan tutup kasir dicetak ke ' + state.printers.bill.name);
+                return true;
+            }
+        } catch (e) { console.error('Print tutup kasir gagal:', e); }
+        return false;
+    }
 
     window.showDailyReport = async function () {
         const content = document.getElementById('dailyReportContent');
@@ -930,7 +899,10 @@
             document.querySelector('#receiptModal h2').innerText = 'Laporan Tutup Kasir';
             window.closeModal('dailyReportModal');
             document.getElementById('receiptModal').classList.add('active');
-            if (!markError) showToast('Kasir ditutup. Klik Print untuk mencetak laporan.');
+            // Auto-cetak ringkasan tutup kasir ke thermal printer bill (kalau terhubung)
+            const closeInfo = { physical: physicalCash, diff, notes };
+            await printShiftCloseThermal(snap, closeInfo);
+            if (!markError) showToast('Kasir ditutup. Laporan shift dicetak ke thermal (jika ada) + Klik Print untuk reprint.');
             if (state.currentPage === 'dashboard') loadDashboard();
             loadKasirExpenses(); // riwayat pengeluaran kasir ikut kembali kosong
         } catch (error) {
@@ -1027,7 +999,10 @@
             extraHeader: `Kasir: ${order.app_users?.full_name || '-'}\nCustomer: ${order.customer_name || 'Walk-in'}\n`,
             items, subtotal: sub, discount: Math.max(0, sub - total), total,
             method: order.payment_method || 'cash',
-            paid: Number(order.paid_amount || total), change: Number(order.change_amount || 0)
+            paid: Number(order.paid_amount || total), change: Number(order.change_amount || 0),
+            // Untuk checker/dapur:
+            orderType: order.order_type || '-',
+            customer: order.customer_name || 'Walk-in'
         };
         printReceiptToEither(receiptData, '#orderDetailContent');
     };
@@ -1667,54 +1642,57 @@ ${state.exportData.expenses.map(e => `<tr><td>${new Date(e.created_at).toLocaleS
                 const st = s.store_info || {};
                 content.innerHTML = `<div class="settings-card"><h3><i class="fas fa-store"></i> Info Toko</h3><div class="input-group"><label>Nama Toko</label><input type="text" id="settingStoreName" value="${escapeHtml(st.name || 'MasuSpace Coffee')}"></div><div class="input-group"><label>Alamat</label><input type="text" id="settingAddress" value="${escapeHtml(st.address || '')}"></div><div class="input-group"><label>Telepon</label><input type="text" id="settingPhone" value="${escapeHtml(st.phone || '')}"></div><div class="input-group"><label>Email</label><input type="email" id="settingEmail" value="${escapeHtml(st.email || '')}"></div><button class="btn-primary" onclick="window.saveSettings('store_info')"><i class="fas fa-save"></i> Simpan</button></div>`;
             } else if (tab === 'printer') {
-                const isUSB = state.printer.type === 'usb';
-                const isBT = state.printer.type === 'bluetooth';
-                const connected = !!state.printer.device;
-                const supportsUSB = !!(navigator.usb);
-                const supportsBT = !!(navigator.bluetooth);
+                const bill = state.printers.bill;
+                const chk = state.printers.checker;
+                const renderCard = (slot, label, icon, desc) => {
+                    const p = state.printers[slot];
+                    const connected = !!p.device;
+                    const isUSB = p.type === 'usb', isBT = p.type === 'bluetooth';
+                    const supportsUSB = !!navigator.usb;
+                    const supportsBT = !!navigator.bluetooth;
+                    return `
+                        <div class="printer-status-card ${connected ? 'connected' : 'disconnected'}">
+                            <div class="printer-status-icon"><i class="fas fa-${isUSB ? 'plug' : isBT ? 'bluetooth-b' : icon}"></i></div>
+                            <div class="printer-status-info">
+                                <div class="printer-status-label">${label}</div>
+                                <div class="printer-status-value">${connected ? 'Terhubung' : 'Belum Terhubung'}</div>
+                                ${p.name ? `<div class="printer-status-device">${escapeHtml(p.name)} • ${isUSB ? 'USB' : 'Bluetooth'}</div>` : `<div class="printer-status-device">${desc}</div>`}
+                            </div>
+                        </div>
+                        <div class="printer-actions">
+                            <button class="btn-primary" onclick="window.connectUSBPrinter('${slot}')" ${supportsUSB ? '' : 'disabled'}><i class="fas fa-plug"></i> Hubungkan USB</button>
+                            <button class="btn-primary" onclick="window.connectBluetoothPrinter('${slot}')" ${supportsBT ? '' : 'disabled'}><i class="fab fa-bluetooth-b"></i> Hubungkan Bluetooth</button>
+                            ${connected ? `
+                                <button class="btn-secondary" onclick="window.testPrint('${slot}')"><i class="fas fa-flask"></i> Tes Print</button>
+                                <button class="btn-secondary" style="color:#ef4444;border-color:#fecaca" onclick="window.disconnectPrinter('${slot}')"><i class="fas fa-unlink"></i> Putuskan</button>
+                            ` : ''}
+                        </div>
+                    `;
+                };
+                const supportsUSB = !!navigator.usb, supportsBT = !!navigator.bluetooth;
                 content.innerHTML = `
                     <div class="settings-card">
-                        <h3><i class="fas fa-print" style="color:var(--primary)"></i> Hubungkan Printer Thermal</h3>
-                        <p style="font-size:13px;color:var(--text-light);margin-bottom:16px;line-height:1.6">Hubungkan printer thermal <b>USB</b> atau <b>Bluetooth</b> untuk cetak struk langsung dari browser tanpa instal driver. Setelah terhubung sekali, browser mengingat printer dan akan <b>otomatis menyambung ulang</b> saat aplikasi dibuka atau printer dinyalakan kembali.</p>
-                        
-                        <div class="printer-status-card ${connected ? 'connected' : 'disconnected'}">
-                            <div class="printer-status-icon"><i class="fas fa-${isUSB ? 'plug' : isBT ? 'bluetooth-b' : 'print'}"></i></div>
-                            <div class="printer-status-info">
-                                <div class="printer-status-label">Status Printer</div>
-                                <div class="printer-status-value">${connected ? 'Terhubung' : 'Belum Terhubung'}</div>
-                                ${state.printer.name ? `<div class="printer-status-device">${escapeHtml(state.printer.name)} • ${isUSB ? 'USB' : 'Bluetooth'}</div>` : '<div class="printer-status-device">Pilih jenis koneksi di bawah</div>'}
-                            </div>
+                        <h3><i class="fas fa-print" style="color:var(--primary)"></i> Hubungkan Printer</h3>
+                        <p style="font-size:13px;color:var(--text-light);margin-bottom:16px;line-height:1.6">Pakai <b>2 printer</b>: <b>Bill</b> untuk struk customer (lengkap dengan harga), <b>Checker/Dapur</b> untuk kitchen order ticket (menu saja, tanpa harga). Setiap pembayaran sukses, bill dicetak ke printer bill DAN checker otomatis dicetak ke printer dapur — tidak perlu klik dua kali.</p>
+
+                        ${renderCard('bill', 'Printer Bill (Struk Customer)', 'receipt', 'Untuk struk customer dengan harga')}
+                        <hr style="border:none;border-top:1px dashed var(--border);margin:16px 0">
+                        ${renderCard('checker', 'Printer Checker / Dapur', 'utensils', 'Untuk kitchen ticket: menu saja')}
+
+                        <div class="printer-tip">
+                            <i class="fas fa-circle-info"></i>
+                            <b>Auto-reconnect aktif.</b> Setelah berhasil terhubung, browser mengingat izin printer. Saat pembayaran sukses: bill ke printer bill + kitchen ticket ke printer dapur, otomatis berbarengan.
                         </div>
-                        
-                        <div class="printer-actions">
-                            <button class="btn-primary" onclick="window.connectUSBPrinter()" ${supportsUSB ? '' : 'disabled'} title="${supportsUSB ? 'Hubungkan via Web USB' : 'Browser tidak mendukung Web USB'}"><i class="fas fa-plug"></i> Hubungkan USB</button>
-                            <button class="btn-primary" onclick="window.connectBluetoothPrinter()" ${supportsBT ? '' : 'disabled'} title="${supportsBT ? 'Hubungkan via Web Bluetooth' : 'Browser tidak mendukung Web Bluetooth'}"><i class="fab fa-bluetooth-b"></i> Hubungkan Bluetooth</button>
-                        </div>
-                        
-                        ${connected ? `
-                            <div class="printer-actions">
-                                <button class="btn-secondary" onclick="window.testPrint()"><i class="fas fa-flask"></i> Tes Print</button>
-                                <button class="btn-secondary" style="color:#ef4444;border-color:#fecaca" onclick="window.disconnectPrinter()"><i class="fas fa-unlink"></i> Putuskan</button>
-                            </div>
-                        ` : ''}
-                        
-                        <div style="margin-top:16px;font-size:12px;color:var(--text-light);line-height:1.7">
-                            <p style="font-weight:700;margin-bottom:8px;color:var(--text)">Persyaratan koneksi:</p>
+
+                        <div style="margin-top:14px;font-size:12px;color:var(--text-light);line-height:1.7">
+                            <p style="font-weight:700;margin-bottom:8px;color:var(--text)">Persyaratan:</p>
                             <ul style="padding-left:20px;display:grid;gap:6px">
-                                <li>Browser <b>Chrome</b> atau <b>Edge</b> versi terbaru (desktop/Android)</li>
-                                <li>Akses aplikasi via <b>HTTPS</b> (bukan HTTP)</li>
-                                <li>USB: printer thermal dengan kabel USB</li>
-                                <li>Bluetooth: printer thermal yang support BLE</li>
+                                <li>Browser <b>Chrome</b> atau <b>Edge</b> via HTTPS</li>
+                                <li>2 printer thermal: 1 USB + 1 Bluetooth, atau 2 USB (BEDAK, jangan 2 BT karena konflik GATT)</li>
                                 <li>Saat dialog muncul, pilih printer lalu klik "Hubungkan"</li>
                             </ul>
                         </div>
-                        
-                        <div class="printer-tip">
-                            <i class="fas fa-circle-info"></i>
-                            <b>Auto-reconnect aktif.</b> Setelah berhasil terhubung, browser mengingat izin printer. Aplikasi akan menyambung ulang otomatis jika: (1) halaman dimuat ulang, (2) printer dicabut lalu dicolok lagi, (3) Bluetooth dimatikan lalu dinyalakan lagi. Tidak perlu klik "Hubungkan" berulang kali.
-                        </div>
-                        
-                        ${!supportsUSB && !supportsBT ? `<div class="printer-warn"><i class="fas fa-triangle-exclamation"></i>Browser ini tidak mendukung Web USB / Web Bluetooth. Gunakan Chrome atau Edge terbaru via HTTPS untuk mengaktifkan fitur ini.</div>` : ''}
+                        ${!supportsUSB && !supportsBT ? `<div class="printer-warn"><i class="fas fa-triangle-exclamation"></i>Browser tidak mendukung Web USB/Bluetooth. Gunakan Chrome/Edge via HTTPS.</div>` : ''}
                     </div>
                 `;
             } else {
@@ -2034,53 +2012,29 @@ ${state.exportData.expenses.map(e => `<tr><td>${new Date(e.created_at).toLocaleS
     window.closeModal = function (id) { document.getElementById(id)?.classList.remove('active'); };
     document.addEventListener('click', e => { if (e.target.classList.contains('modal-overlay') && !e.target.classList.contains('no-dismiss')) e.target.classList.remove('active'); });
 
-    /* ---------- Printer (USB / Bluetooth) dengan auto-reconnect ---------- */
-    const PRINTER_STORAGE_KEY = 'masuspace-printer';
+    /* ---------- Printer (USB / Bluetooth) — 2 slot: bill & checker ---------- */
+    const PRINTER_SLOTS = ['bill', 'checker'];
+    const PRINTER_STORAGE_PREFIX = 'masuspace-printer-';
 
     // Filter Web USB umum untuk printer thermal (class 7) + VID populer
     const USB_FILTERS = [
-        { classCode: 7 }, // USB Printer class
-        { vendorId: 0x04b8 }, // Epson
-        { vendorId: 0x0519 }, // Star Micronics
-        { vendorId: 0x0fe6 }, // ICS Advent
-        { vendorId: 0x154f }, // SNBC
-        { vendorId: 0x0dd4 }, // Custom
-        { vendorId: 0x20d1 }, // Rongta
-        { vendorId: 0x1fc9 }, // NXP
-        { vendorId: 0x0416 }, // Winbond
-        { vendorId: 0x1504 }, // Bixolon
-        { vendorId: 0x0a1b }, // Seiko
-        { vendorId: 0x0d28 }  // Makino
+        { classCode: 7 },
+        { vendorId: 0x04b8 }, { vendorId: 0x0519 }, { vendorId: 0x0fe6 },
+        { vendorId: 0x154f }, { vendorId: 0x0dd4 }, { vendorId: 0x20d1 },
+        { vendorId: 0x1fc9 }, { vendorId: 0x0416 }, { vendorId: 0x1504 },
+        { vendorId: 0x0a1b }, { vendorId: 0x0d28 }
     ];
 
-    function savePrinterState() {
-        if (!state.printer.type) { localStorage.removeItem(PRINTER_STORAGE_KEY); return; }
-        const p = { type: state.printer.type, name: state.printer.name };
-        if (state.printer.type === 'usb') { p.vendorId = state.printer.vendorId; p.productId = state.printer.productId; }
-        if (state.printer.type === 'bluetooth') { p.id = state.printer.id; }
-        try { localStorage.setItem(PRINTER_STORAGE_KEY, JSON.stringify(p)); } catch (e) { console.error(e); }
-    }
-
-    // ESC/POS bytes untuk tes print
-    function escposTest() {
-        const enc = new TextEncoder();
-        return enc.encode(
-            '\x1B\x40' +                                  // INIT
-            '\x1B\x21\x30' +                              // Double width & height
-            'MASUSPACE POS\n' +
-            '\x1B\x21\x00' +                              // Normal
-            '================\n' +
-            'Test Print Berhasil!\n' +
-            'Printer: ' + (state.printer.name || '-') + '\n' +
-            'Tanggal: ' + new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' }) + '\n' +
-            '================\n' +
-            '\x1B\x64\x03' +                              // Feed 3 lines
-            '\x1D\x56\x00'                                // Full cut
-        );
+    function savePrinterState(slot) {
+        const p = state.printers[slot];
+        if (!p.type) { localStorage.removeItem(PRINTER_STORAGE_PREFIX + slot); return; }
+        const saved = { type: p.type, name: p.name };
+        if (p.type === 'usb') { saved.vendorId = p.vendorId; saved.productId = p.productId; }
+        if (p.type === 'bluetooth') { saved.id = p.id; }
+        try { localStorage.setItem(PRINTER_STORAGE_PREFIX + slot, JSON.stringify(saved)); } catch (e) { console.error(e); }
     }
 
     async function writeToUSBPrinter(device, data) {
-        // Cari endpoint OUT bulk di interface 0
         const iface = device.configuration.interfaces[0];
         const ep = iface.alternates[0].endpoints.find(e => e.direction === 'out' && e.type === 'bulk');
         const endpointNumber = ep ? ep.endpointNumber : 1;
@@ -2090,7 +2044,6 @@ ${state.exportData.expenses.map(e => `<tr><td>${new Date(e.created_at).toLocaleS
     async function writeToBluetoothPrinter(device, data) {
         if (!device.gatt?.connected) await device.gatt.connect();
         const services = await device.gatt.getPrimaryServices();
-        // Cari characteristic yang writable (umumnya 0x2af6 'printer' atau 0xff02 untuk beberapa printer)
         let writable = null;
         for (const svc of services) {
             const chars = await svc.getCharacteristics();
@@ -2098,60 +2051,59 @@ ${state.exportData.expenses.map(e => `<tr><td>${new Date(e.created_at).toLocaleS
             if (c) { writable = c; break; }
         }
         if (!writable) throw new Error('Tidak ada karakteristik printer yang bisa ditulis');
-        // Chunk 20 byte (MTU default BLE) supaya stabil
         const chunkSize = writable.properties.writeWithoutResponse && !writable.properties.write ? 180 : 20;
         for (let i = 0; i < data.byteLength; i += chunkSize) {
             const chunk = data.slice(i, i + chunkSize);
-            if (writable.properties.writeWithoutResponse) {
-                await writable.writeValueWithoutResponse(chunk);
-            } else {
-                await writable.writeValueWithResponse(chunk);
-            }
+            if (writable.properties.writeWithoutResponse) await writable.writeValueWithoutResponse(chunk);
+            else await writable.writeValueWithResponse(chunk);
         }
     }
 
-    async function sendToPrinter(data) {
-        if (!state.printer.device) throw new Error('Printer belum terhubung');
-        if (state.printer.type === 'usb') return await writeToUSBPrinter(state.printer.device, data);
-        if (state.printer.type === 'bluetooth') return await writeToBluetoothPrinter(state.printer.device, data);
+    async function sendToPrinter(slot, data) {
+        const p = state.printers[slot];
+        if (!p.device) throw new Error(`Printer ${slot} belum terhubung`);
+        if (p.type === 'usb') return await writeToUSBPrinter(p.device, data);
+        if (p.type === 'bluetooth') return await writeToBluetoothPrinter(p.device, data);
         throw new Error('Tipe printer tidak dikenal');
     }
 
-    // Reconnect GATT kalau Bluetooth printer terputus (misalnya idle/sleep)
-    function attachBluetoothReconnectHandler(device) {
+    function attachBluetoothReconnectHandler(slot, device) {
         device.addEventListener('gattserverdisconnected', async () => {
-            console.log('Bluetooth printer disconnected, will retry in 2s...');
-            // Jangan ubah state.printer.device supaya bisa dipakai lagi
+            console.log(`[${slot}] BT printer disconnected, retrying in 2s...`);
             let attempts = 0;
             const tryReconnect = async () => {
-                if (attempts > 10) { console.warn('Gagal reconnect BT setelah 10x.'); return; }
+                if (attempts > 10) { console.warn(`[${slot}] Gagal reconnect BT setelah 10x.`); return; }
                 attempts++;
                 try {
                     await device.gatt.connect();
-                    console.log('Bluetooth printer reconnected on attempt', attempts);
-                    if (typeof showToast === 'function') showToast('Printer Bluetooth tersambung kembali');
-                } catch (e) {
-                    setTimeout(tryReconnect, 2000);
-                }
+                    state.printers[slot].device = device;
+                    console.log(`[${slot}] BT reconnected on attempt`, attempts);
+                    if (typeof showToast === 'function') showToast(`Printer ${slot} (Bluetooth) tersambung kembali`);
+                } catch (e) { setTimeout(tryReconnect, 2000); }
             };
             setTimeout(tryReconnect, 2000);
         });
     }
 
-    window.connectUSBPrinter = async function () {
+    async function openUSBDevice(device) {
+        await device.open();
+        if (device.configuration === null) await device.selectConfiguration(1);
+        await device.claimInterface(0);
+    }
+
+    window.connectUSBPrinter = async function (slot) {
+        if (!PRINTER_SLOTS.includes(slot)) return;
         if (!navigator.usb) { showToast('Browser tidak mendukung Web USB. Gunakan Chrome/Edge via HTTPS.', true); return; }
         try {
             const device = await navigator.usb.requestDevice({ filters: USB_FILTERS });
-            await device.open();
-            if (device.configuration === null) await device.selectConfiguration(1);
-            await device.claimInterface(0);
-            state.printer = {
+            await openUSBDevice(device);
+            state.printers[slot] = {
                 type: 'usb', device,
                 name: device.productName || `USB Printer ${device.vendorId.toString(16).padStart(4, '0')}:${device.productId.toString(16).padStart(4, '0')}`,
                 vendorId: device.vendorId, productId: device.productId, id: null
             };
-            savePrinterState();
-            showToast('Printer USB terhubung: ' + state.printer.name);
+            savePrinterState(slot);
+            showToast(`Printer ${slot} (USB) terhubung: ` + state.printers[slot].name);
             loadSettings();
         } catch (e) {
             if (e.name === 'NotFoundError') showToast('Tidak ada printer dipilih.', true);
@@ -2160,32 +2112,24 @@ ${state.exportData.expenses.map(e => `<tr><td>${new Date(e.created_at).toLocaleS
         }
     };
 
-    window.connectBluetoothPrinter = async function () {
+    window.connectBluetoothPrinter = async function (slot) {
+        if (!PRINTER_SLOTS.includes(slot)) return;
         if (!navigator.bluetooth) { showToast('Browser tidak mendukung Web Bluetooth. Gunakan Chrome/Edge via HTTPS.', true); return; }
         try {
-            // UUID thermal printer BLE yang umum (Rongta, Xprinter, Goojprt, Epson, Bixolon, dll)
-            // Wajib pakai UUID full — nama alias 'printer' TIDAK valid di Web Bluetooth.
             const optionalServices = [
-                '000018f0-0000-1000-8000-00805f9b34fb', // Printer service umum
-                '000018f1-0000-1000-8000-00805f9b34fb', // Printer service varian
-                '0000ff00-0000-1000-8000-00805f9b34fb', // Custom printer (umum di printer China)
-                '0000ffe0-0000-1000-8000-00805f9b34fb', // SPP-over-BLE (TI cc254x)
-                '0000ffe1-0000-1000-8000-00805f9b34fb', // SPP-over-BLE characteristic
-                '49535343-fe7d-4ae5-8fa9-9fafd205e455', // TI UART service
-                'e7810a71-73ae-499d-8c15-faa5a80f03de', // Nordic UART service (NUART)
-                '00001800-0000-1000-8000-00805f9b34fb', // generic_access
-                '0000180a-0000-1000-8000-00805f9b34fb', // device_information
-                '0000180f-0000-1000-8000-00805f9b34fb'  // battery_service
+                '000018f0-0000-1000-8000-00805f9b34fb', '000018f1-0000-1000-8000-00805f9b34fb',
+                '0000ff00-0000-1000-8000-00805f9b34fb', '0000ffe0-0000-1000-8000-00805f9b34fb',
+                '0000ffe1-0000-1000-8000-00805f9b34fb', '49535343-fe7d-4ae5-8fa9-9fafd205e455',
+                'e7810a71-73ae-499d-8c15-faa5a80f03de',
+                '00001800-0000-1000-8000-00805f9b34fb', '0000180a-0000-1000-8000-00805f9b34fb',
+                '0000180f-0000-1000-8000-00805f9b34fb'
             ];
-            const device = await navigator.bluetooth.requestDevice({
-                acceptAllDevices: true,
-                optionalServices
-            });
+            const device = await navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices });
             await device.gatt.connect();
-            attachBluetoothReconnectHandler(device);
-            state.printer = { type: 'bluetooth', device, name: device.name || 'Bluetooth Printer', vendorId: null, productId: null, id: device.id };
-            savePrinterState();
-            showToast('Printer Bluetooth terhubung: ' + state.printer.name);
+            attachBluetoothReconnectHandler(slot, device);
+            state.printers[slot] = { type: 'bluetooth', device, name: device.name || 'Bluetooth Printer', vendorId: null, productId: null, id: device.id };
+            savePrinterState(slot);
+            showToast(`Printer ${slot} (Bluetooth) terhubung: ` + state.printers[slot].name);
             loadSettings();
         } catch (e) {
             if (e.name === 'NotFoundError') showToast('Tidak ada printer dipilih.', true);
@@ -2194,38 +2138,50 @@ ${state.exportData.expenses.map(e => `<tr><td>${new Date(e.created_at).toLocaleS
         }
     };
 
-    window.disconnectPrinter = async function () {
+    window.disconnectPrinter = async function (slot) {
+        if (!PRINTER_SLOTS.includes(slot)) return;
         try {
-            if (state.printer.type === 'usb' && state.printer.device) {
-                try { await state.printer.device.close(); } catch (e) { /* ignore */ }
-            } else if (state.printer.type === 'bluetooth' && state.printer.device?.gatt?.connected) {
-                state.printer.device.gatt.disconnect();
-            }
+            const p = state.printers[slot];
+            if (p.type === 'usb' && p.device) { try { await p.device.close(); } catch (e) {} }
+            else if (p.type === 'bluetooth' && p.device?.gatt?.connected) p.device.gatt.disconnect();
         } catch (e) { console.error(e); }
-        state.printer = { type: null, device: null, name: null, vendorId: null, productId: null, id: null };
-        localStorage.removeItem(PRINTER_STORAGE_KEY);
-        showToast('Printer diputus');
+        state.printers[slot] = { type: null, device: null, name: null, vendorId: null, productId: null, id: null };
+        localStorage.removeItem(PRINTER_STORAGE_PREFIX + slot);
+        showToast(`Printer ${slot} diputus`);
         loadSettings();
     };
 
-    window.testPrint = async function () {
-        if (!state.printer.device) { showToast('Printer belum terhubung.', true); return; }
+    // ESC/POS: tes print per slot
+    async function escposTest(slot) {
+        const enc = new TextEncoder();
+        const title = slot === 'checker' ? 'DAPUR / CHECKER' : 'BILL (CUSTOMER)';
+        return enc.encode(
+            '\x1B\x40\x1B\x21\x30' + title + '\n\x1B\x21\x00' +
+            '================\n' +
+            'Tes print slot: ' + slot + '\n' +
+            'Printer: ' + (state.printers[slot].name || '-') + '\n' +
+            'Waktu: ' + new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' }) + '\n' +
+            '================\n\x1B\x64\x03\x1D\x56\x00'
+        );
+    }
+
+    window.testPrint = async function (slot) {
+        if (!PRINTER_SLOTS.includes(slot)) return;
+        if (!state.printers[slot].device) { showToast(`Printer ${slot} belum terhubung.`, true); return; }
         try {
-            await sendToPrinter(escposTest());
-            showToast('Tes print berhasil dikirim ke ' + state.printer.name);
+            await sendToPrinter(slot, await escposTest(slot));
+            showToast(`Tes print ${slot} berhasil dikirim`);
         } catch (e) {
             console.error(e);
             showToast('Tes print gagal: ' + (e.message || 'Unknown'), true);
-            // Kalau Bluetooth, coba reconnect otomatis
-            if (state.printer.type === 'bluetooth' && state.printer.device) {
-                try { await state.printer.device.gatt.connect(); } catch (ee) {}
+            if (state.printers[slot].type === 'bluetooth' && state.printers[slot].device) {
+                try { await state.printers[slot].device.gatt.connect(); } catch (ee) {}
             }
         }
     };
 
-    // Auto-reconnect: panggil saat app start
-    async function reconnectPrinter() {
-        const saved = localStorage.getItem(PRINTER_STORAGE_KEY);
+    async function reconnectPrinterSlot(slot) {
+        const saved = localStorage.getItem(PRINTER_STORAGE_PREFIX + slot);
         if (!saved) return;
         let p;
         try { p = JSON.parse(saved); } catch (e) { return; }
@@ -2234,85 +2190,284 @@ ${state.exportData.expenses.map(e => `<tr><td>${new Date(e.created_at).toLocaleS
                 const devices = await navigator.usb.getDevices();
                 const match = devices.find(d => d.vendorId === p.vendorId && d.productId === p.productId);
                 if (match) {
-                    await match.open();
-                    if (match.configuration === null) await match.selectConfiguration(1);
-                    await match.claimInterface(0);
-                    state.printer = { type: 'usb', device: match, name: p.name, vendorId: p.vendorId, productId: p.productId, id: null };
-                    console.log('Printer USB auto-reconnect:', p.name);
+                    await openUSBDevice(match);
+                    state.printers[slot] = { type: 'usb', device: match, name: p.name, vendorId: p.vendorId, productId: p.productId, id: null };
+                    console.log(`[${slot}] USB auto-reconnect:`, p.name);
                 }
             } else if (p.type === 'bluetooth' && navigator.bluetooth) {
-                // navigator.bluetooth.getDevices() (Chrome 95+)
                 if (navigator.bluetooth.getDevices) {
                     const devices = await navigator.bluetooth.getDevices();
                     const match = devices.find(d => d.id === p.id || d.name === p.name);
                     if (match) {
-                        attachBluetoothReconnectHandler(match);
+                        attachBluetoothReconnectHandler(slot, match);
                         await match.gatt.connect();
-                        state.printer = { type: 'bluetooth', device: match, name: p.name, vendorId: null, productId: null, id: p.id || match.id };
-                        console.log('Printer Bluetooth auto-reconnect:', p.name);
+                        state.printers[slot] = { type: 'bluetooth', device: match, name: p.name, vendorId: null, productId: null, id: p.id || match.id };
+                        console.log(`[${slot}] BT auto-reconnect:`, p.name);
                     }
                 } else {
-                    // Fallback: state.printer dipakai tapi device handle null; user klik Tes Print akan meminta re-grant
-                    console.warn('Browser tidak mendukung navigator.bluetooth.getDevices() — user perlu klik Hubungkan Bluetooth sekali lagi.');
-                    state.printer = { type: 'bluetooth', device: null, name: p.name, vendorId: null, productId: null, id: p.id };
+                    state.printers[slot] = { type: 'bluetooth', device: null, name: p.name, vendorId: null, productId: null, id: p.id };
                 }
             }
-        } catch (e) {
-            console.error('Printer auto-reconnect gagal:', e);
-        }
+        } catch (e) { console.error(`[${slot}] auto-reconnect gagal:`, e); }
     }
 
-    // USB plug/unplug listener — auto-reconnect fisik
+    async function reconnectAllPrinters() {
+        for (const slot of PRINTER_SLOTS) await reconnectPrinterSlot(slot);
+    }
+
+    // USB plug/unplug listeners
     if (navigator.usb) {
         navigator.usb.addEventListener('connect', e => {
-            const saved = localStorage.getItem(PRINTER_STORAGE_KEY);
-            if (!saved) return;
-            try {
-                const p = JSON.parse(saved);
-                if (p.type === 'usb' && p.vendorId === e.device.vendorId && p.productId === e.device.productId) {
-                    console.log('USB printer plugged back, reconnecting...');
-                    reconnectPrinter().then(() => { if (state.currentPage === 'settings') loadSettings(); });
-                }
-            } catch (err) { /* ignore */ }
+            for (const slot of PRINTER_SLOTS) {
+                const saved = localStorage.getItem(PRINTER_STORAGE_PREFIX + slot);
+                if (!saved) continue;
+                try {
+                    const p = JSON.parse(saved);
+                    if (p.type === 'usb' && p.vendorId === e.device.vendorId && p.productId === e.device.productId) {
+                        console.log(`[${slot}] USB plugged back, reconnecting...`);
+                        reconnectPrinterSlot(slot).then(() => { if (state.currentPage === 'settings') loadSettings(); });
+                    }
+                } catch (err) {}
+            }
         });
         navigator.usb.addEventListener('disconnect', e => {
-            if (state.printer.type === 'usb' && state.printer.device === e.device) {
-                state.printer.device = null;
-                console.warn('Printer USB fisik dicabut. Akan auto-reconnect saat dicolok lagi.');
-                if (state.currentPage === 'settings') loadSettings();
-                // Tetap simpan saved state (jangan hapus localStorage) supaya bisa reconnect
+            for (const slot of PRINTER_SLOTS) {
+                if (state.printers[slot].type === 'usb' && state.printers[slot].device === e.device) {
+                    state.printers[slot].device = null;
+                    console.warn(`[${slot}] USB dicabut. Akan auto-reconnect saat dicolok lagi.`);
+                    if (state.currentPage === 'settings') loadSettings();
+                }
             }
         });
     }
 
-    // Bluetooth availability listener — auto-reconnect saat adapter nyala
+    // Bluetooth availability
     if (navigator.bluetooth) {
         navigator.bluetooth.addEventListener('availabilitychanged', e => {
-            if (e.value && localStorage.getItem(PRINTER_STORAGE_KEY)) {
-                console.log('Bluetooth available again, reconnecting printer...');
-                reconnectPrinter().then(() => { if (state.currentPage === 'settings') loadSettings(); });
-            } else if (!e.value && state.printer.type === 'bluetooth') {
-                console.warn('Bluetooth adapter off. Akan reconnect saat nyala lagi.');
-                state.printer.device = null;
+            if (e.value) {
+                for (const slot of PRINTER_SLOTS) {
+                    if (localStorage.getItem(PRINTER_STORAGE_PREFIX + slot)) reconnectPrinterSlot(slot);
+                }
                 if (state.currentPage === 'settings') loadSettings();
+            } else {
+                for (const slot of PRINTER_SLOTS) {
+                    if (state.printers[slot].type === 'bluetooth') {
+                        state.printers[slot].device = null;
+                        if (state.currentPage === 'settings') loadSettings();
+                    }
+                }
             }
         });
     }
 
-    // Helper publik supaya receipt/order detail bisa langsung cetak ke printer thermal
-    window.printToThermalPrinter = async function (text) {
-        if (!state.printer.device) return false;
+    /* ---------- ESC/POS: BILL (struk customer lengkap, 58mm / 32 kolom) ---------- */
+    function fmtRpShort(n) { return Math.round(Number(n) || 0).toLocaleString('id-ID'); }
+
+    function buildEscPosText(r) {
+        const W = 32;
+        const center = t => ' '.repeat(Math.max(0, (W - t.length) / 2 | 0)) + t;
+        const pad2 = (a, b) => {
+            const space = Math.max(1, W - a.length - b.length);
+            return a + ' '.repeat(space) + b;
+        };
+        const wrap2 = (a, b) => {
+            // jika a terlalu panjang, pecah ke baris berikutnya, b tetap di kanan baris pertama
+            const maxA = W - b.length - 1;
+            if (a.length <= maxA) return pad2(a, b);
+            const first = a.slice(0, maxA);
+            const rest = a.slice(maxA);
+            return pad2(first, b) + '\n' + '  ' + rest;
+        };
+        let out = '';
+        out += '\x1B\x40';                       // init
+        out += '\x1B\x21\x30' + center('MASUSPACE') + '\n';
+        out += '\x1B\x21\x00' + center('Coffee Shop') + '\n';
+        out += center(r.dateLabel) + '\n';
+        out += center(r.number) + '\n';
+        if (r.extraHeader) out += r.extraHeader; // sudah berakhiran \n
+        out += '-'.repeat(W) + '\n';
+        // Header kolom
+        out += pad2('Item', 'Total') + '\n';
+        out += '-'.repeat(W) + '\n';
+        r.items.forEach(i => {
+            out += wrap2(`${i.qty}x ${i.name}`, 'Rp ' + fmtRpShort(i.unit_price * i.qty)) + '\n';
+            if (i.detail) out += '  ' + i.detail + '\n';
+        });
+        out += '-'.repeat(W) + '\n';
+        out += pad2('Subtotal', 'Rp ' + fmtRpShort(r.subtotal)) + '\n';
+        if (r.discount > 0) out += pad2('Diskon', '-Rp ' + fmtRpShort(r.discount)) + '\n';
+        out += '\x1B\x21\x20' + pad2('TOTAL', 'Rp ' + fmtRpShort(r.total)) + '\n';
+        out += '\x1B\x21\x00';
+        out += pad2('Bayar ' + String(r.method).toUpperCase(), 'Rp ' + fmtRpShort(r.paid)) + '\n';
+        if (r.method === 'cash') out += pad2('Kembali', 'Rp ' + fmtRpShort(r.change)) + '\n';
+        out += '-'.repeat(W) + '\n';
+        out += center('Terima kasih!') + '\n';
+        out += center('Selamat menikmati') + '\n';
+        out += center('MASUSPACE POS') + '\n';
+        out += '\x1B\x64\x03' + '\x1D\x56\x00';   // feed 3 + cut
+        return out;
+    }
+
+    /* ---------- ESC/POS: CHECKER / DAPUR (menu saja, tanpa harga) ---------- */
+    function buildCheckerEscPosText(r) {
+        const W = 32;
+        const center = t => ' '.repeat(Math.max(0, (W - t.length) / 2 | 0)) + t;
+        const left = (a, b) => a + ' '.repeat(Math.max(1, W - a.length - b.length)) + b;
+        let out = '';
+        out += '\x1B\x40';                          // init
+        out += '\x1B\x21\x30' + center('MASUSPACE') + '\n';
+        out += '\x1B\x21\x30' + center('KITCHEN') + '\n';
+        out += '\x1B\x21\x00' + center('- - - DAPUR - - -') + '\n';
+        out += '-'.repeat(W) + '\n';
+        out += left('No', r.number) + '\n';
+        out += left('Waktu', new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', dateStyle: 'short', timeStyle: 'short' })) + '\n';
+        out += left('Tipe', (r.orderType || '-').toUpperCase()) + '\n';
+        out += left('Customer', (r.customer || 'Walk-in')) + '\n';
+        out += '-'.repeat(W) + '\n';
+        out += '\x1B\x21\x08' + 'QTY  MENU' + '\n';  // bold
+        out += '\x1B\x21\x00';
+        out += '-'.repeat(W) + '\n';
+        let count = 0;
+        r.items.forEach(i => {
+            count += Number(i.qty || 0);
+            // qty di kiri (3 kolom + spasi), nama di kanan, wrap bila panjang
+            const qtyStr = String(i.qty) + 'x';
+            const name = i.name;
+            const maxName = W - 5;
+            if (name.length <= maxName) out += '  ' + qtyStr.padStart(3) + '  ' + name + '\n';
+            else {
+                out += '  ' + qtyStr.padStart(3) + '  ' + name.slice(0, maxName) + '\n';
+                let rest = name.slice(maxName);
+                while (rest.length > 0) {
+                    out += '       ' + rest.slice(0, maxName) + '\n';
+                    rest = rest.slice(maxName);
+                }
+            }
+            if (i.detail) out += '         > ' + i.detail + '\n';
+        });
+        out += '-'.repeat(W) + '\n';
+        out += left('Total Item', String(count)) + '\n';
+        out += '-'.repeat(W) + '\n';
+        out += '\x1B\x21\x08' + center('MOHON DIPROSES') + '\n';
+        out += '\x1B\x21\x08' + center('SEGERA') + '\n';
+        out += '\x1B\x21\x00';
+        out += '\x1B\x64\x03' + '\x1D\x56\x00';      // feed 3 + cut
+        return out;
+    }
+
+    /* ---------- ESC/POS: TUTUP KASIR / SHIFT CLOSE (ringkasan angka) ---------- */
+    function buildShiftCloseEscPosText(d, close) {
+        const W = 32;
+        const center = t => ' '.repeat(Math.max(0, (W - t.length) / 2 | 0)) + t;
+        const pad2 = (a, b) => a + ' '.repeat(Math.max(1, W - a.length - b.length)) + b;
+        const fmt = n => Math.round(Number(n) || 0).toLocaleString('id-ID');
+        const tISO = iso => new Date(iso).toLocaleTimeString('id-ID', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit' });
+        let out = '';
+        out += '\x1B\x40';
+        out += '\x1B\x21\x30' + center('MASUSPACE') + '\n';
+        out += '\x1B\x21\x30' + center('TUTUP KASIR') + '\n';
+        out += '\x1B\x21\x00';
+        out += center(new Date(d.to).toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta', dateStyle: 'full' })) + '\n';
+        out += center(`Shift ${tISO(d.from)} - ${tISO(d.to)} WIB`) + '\n';
+        out += center('Oleh: ' + (state.currentUser?.full_name || '-')) + '\n';
+        out += '='.repeat(W) + '\n';
+        // PENJUALAN
+        out += '\x1B\x21\x08' + 'PENJUALAN' + '\n\x1B\x21\x00';
+        out += pad2('Jumlah order', String(d.orders.length)) + '\n';
+        out += '\x1B\x21\x20' + pad2('Total penjualan', 'Rp ' + fmt(d.totalRevenue)) + '\n';
+        out += '\x1B\x21\x00';
+        out += '-'.repeat(W) + '\n';
+        // PEMBAYARAN
+        out += '\x1B\x21\x08' + 'PEMBAYARAN' + '\n\x1B\x21\x00';
+        out += pad2('Cash', 'Rp ' + fmt(d.cashSales)) + '\n';
+        out += pad2('QRIS', 'Rp ' + fmt(d.qris)) + '\n';
+        out += pad2('Debit', 'Rp ' + fmt(d.debit)) + '\n';
+        out += '-'.repeat(W) + '\n';
+        // PENGELUARAN
+        out += '\x1B\x21\x08' + 'PENGELUARAN' + '\n\x1B\x21\x00';
+        if (d.expenses.length) {
+            d.expenses.forEach(x => {
+                const label = (tISO(x.created_at) + ' ' + (x.description || x.category || '-')).slice(0, W - 14);
+                out += pad2(label, '-Rp ' + fmt(x.amount)) + '\n';
+            });
+        } else {
+            out += center('Tidak ada pengeluaran') + '\n';
+        }
+        out += pad2('Total pengeluaran', '-Rp ' + fmt(d.totalExpenses)) + '\n';
+        out += '-'.repeat(W) + '\n';
+        // RINGKASAN CASH
+        out += '\x1B\x21\x08' + 'RINGKASAN CASH' + '\n\x1B\x21\x00';
+        out += pad2('Cash sales', 'Rp ' + fmt(d.cashSales)) + '\n';
+        out += pad2('Pengeluaran', '-Rp ' + fmt(d.totalExpenses)) + '\n';
+        out += '\x1B\x21\x20' + pad2('CASH REAL', 'Rp ' + fmt(d.cashExpected)) + '\n';
+        out += '\x1B\x21\x00';
+        if (close) {
+            out += '-'.repeat(W) + '\n';
+            out += pad2('Uang fisik', 'Rp ' + fmt(close.physical)) + '\n';
+            const diffColor = close.diff === 0 ? '' : '';
+            out += '\x1B\x21\x08' + pad2('Selisih', (close.diff >= 0 ? '+' : '-') + 'Rp ' + fmt(Math.abs(close.diff))) + '\n\x1B\x21\x00';
+            if (close.notes) out += 'Catatan: ' + close.notes.slice(0, W - 8) + '\n';
+            out += pad2('Disetor ke Cash Umum', 'Rp ' + fmt(close.physical)) + '\n';
+            out += center('Shift baru mulai dari Rp 0') + '\n';
+        }
+        out += '='.repeat(W) + '\n';
+        out += center('Terima kasih') + '\n';
+        out += center('MASUSPACE POS') + '\n';
+        out += '\x1B\x64\x05' + '\x1D\x56\x00'; // feed 5 lines + cut
+        return out;
+    }
+
+    /* ---------- Print helper publik ---------- */
+    async function rawSend(slot, escposText) {
+        if (!state.printers[slot].device) return false;
         try {
             const enc = new TextEncoder();
-            await sendToPrinter(enc.encode('\x1B\x40' + text + '\n\x1B\x64\x03\x1D\x56\x00'));
+            await sendToPrinter(slot, enc.encode(escposText));
             return true;
         } catch (e) {
-            console.error('Print thermal gagal:', e);
+            console.error(`Print ${slot} gagal:`, e);
             return false;
         }
+    }
+
+    // Cetak bill (lengkap): kalau printer bill terhubung → thermal; kalau tidak → fallback browser
+    // Sekalian kirim checker otomatis ke printer checker (kalau terhubung)
+    async function printReceiptToEither(receiptData, fallbackContentSelector) {
+        const billConnected = !!state.printers.bill.device;
+        const checkerConnected = !!state.printers.checker.device;
+
+        // 1) BILL: thermal kalau ada, kalau tidak fallback browser
+        if (billConnected) {
+            const ok = await rawSend('bill', buildEscPosText(receiptData));
+            if (ok) showToast('Bill dicetak ke ' + state.printers.bill.name);
+            else { printHtml(document.querySelector(fallbackContentSelector).innerHTML); showToast('Bill dicetak via browser (printer bill gagal).', true); }
+        } else {
+            printHtml(document.querySelector(fallbackContentSelector).innerHTML);
+        }
+
+        // 2) CHECKER: kirim ke printer dapur kalau ada (tidak ada fallback browser)
+        if (checkerConnected) {
+            const checkerData = {
+                number: receiptData.number,
+                items: receiptData.items,
+                orderType: receiptData.orderType || receiptData._orderType,
+                customer: receiptData.customer || receiptData._customer
+            };
+            const ok = await rawSend('checker', buildCheckerEscPosText(checkerData));
+            if (ok) showToast('Checker dikirim ke dapur: ' + state.printers.checker.name);
+            else showToast('Checker gagal cetak (printer dapur bermasalah).', true);
+        }
+    }
+
+    window.isThermalPrinterConnected = function (slot) {
+        if (slot) return !!state.printers[slot]?.device;
+        return !!(state.printers.bill.device || state.printers.checker.device);
     };
-    window.isThermalPrinterConnected = function () { return !!state.printer.device; };
-    window.getPrinterName = function () { return state.printer.name || null; };
+    window.getPrinterName = function (slot) {
+        if (slot) return state.printers[slot]?.name || null;
+        return state.printers.bill.name || state.printers.checker.name || null;
+    };
+    window.printToThermalPrinter = async function (text) { return await rawSend('bill', text); };
 
     document.addEventListener('DOMContentLoaded', function () {
         applyBrandLogo(localStorage.getItem('masuspace-logo'));
