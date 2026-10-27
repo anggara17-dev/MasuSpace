@@ -21,7 +21,8 @@
         cart: [], categories: [], products: [],
         modalProduct: null, modalQty: 1,
         paymentMethod: 'cash', cashReceived: 0, discount: { type: 'percent', value: 0 },
-        orderType: 'dine_in', currentReceipt: null, kasirExpenses: [], pendingPhotoBase64: null
+        orderType: 'dine_in', currentReceipt: null, kasirExpenses: [], pendingPhotoBase64: null,
+        printer: { type: null, device: null, name: null, vendorId: null, productId: null, id: null }
     };
     let dashboardRequestId = 0, dashboardFilterTimer;
     let orderRequestId = 0, orderFilterTimer;
@@ -1577,6 +1578,57 @@ ${state.exportData.expenses.map(e => `<tr><td>${new Date(e.created_at).toLocaleS
             if (tab === 'store') {
                 const st = s.store_info || {};
                 content.innerHTML = `<div class="settings-card"><h3><i class="fas fa-store"></i> Info Toko</h3><div class="input-group"><label>Nama Toko</label><input type="text" id="settingStoreName" value="${escapeHtml(st.name || 'MasuSpace Coffee')}"></div><div class="input-group"><label>Alamat</label><input type="text" id="settingAddress" value="${escapeHtml(st.address || '')}"></div><div class="input-group"><label>Telepon</label><input type="text" id="settingPhone" value="${escapeHtml(st.phone || '')}"></div><div class="input-group"><label>Email</label><input type="email" id="settingEmail" value="${escapeHtml(st.email || '')}"></div><button class="btn-primary" onclick="window.saveSettings('store_info')"><i class="fas fa-save"></i> Simpan</button></div>`;
+            } else if (tab === 'printer') {
+                const isUSB = state.printer.type === 'usb';
+                const isBT = state.printer.type === 'bluetooth';
+                const connected = !!state.printer.device;
+                const supportsUSB = !!(navigator.usb);
+                const supportsBT = !!(navigator.bluetooth);
+                content.innerHTML = `
+                    <div class="settings-card">
+                        <h3><i class="fas fa-print" style="color:var(--primary)"></i> Hubungkan Printer Thermal</h3>
+                        <p style="font-size:13px;color:var(--text-light);margin-bottom:16px;line-height:1.6">Hubungkan printer thermal <b>USB</b> atau <b>Bluetooth</b> untuk cetak struk langsung dari browser tanpa instal driver. Setelah terhubung sekali, browser mengingat printer dan akan <b>otomatis menyambung ulang</b> saat aplikasi dibuka atau printer dinyalakan kembali.</p>
+                        
+                        <div class="printer-status-card ${connected ? 'connected' : 'disconnected'}">
+                            <div class="printer-status-icon"><i class="fas fa-${isUSB ? 'plug' : isBT ? 'bluetooth-b' : 'print'}"></i></div>
+                            <div class="printer-status-info">
+                                <div class="printer-status-label">Status Printer</div>
+                                <div class="printer-status-value">${connected ? 'Terhubung' : 'Belum Terhubung'}</div>
+                                ${state.printer.name ? `<div class="printer-status-device">${escapeHtml(state.printer.name)} • ${isUSB ? 'USB' : 'Bluetooth'}</div>` : '<div class="printer-status-device">Pilih jenis koneksi di bawah</div>'}
+                            </div>
+                        </div>
+                        
+                        <div class="printer-actions">
+                            <button class="btn-primary" onclick="window.connectUSBPrinter()" ${supportsUSB ? '' : 'disabled'} title="${supportsUSB ? 'Hubungkan via Web USB' : 'Browser tidak mendukung Web USB'}"><i class="fas fa-plug"></i> Hubungkan USB</button>
+                            <button class="btn-primary" onclick="window.connectBluetoothPrinter()" ${supportsBT ? '' : 'disabled'} title="${supportsBT ? 'Hubungkan via Web Bluetooth' : 'Browser tidak mendukung Web Bluetooth'}"><i class="fab fa-bluetooth-b"></i> Hubungkan Bluetooth</button>
+                        </div>
+                        
+                        ${connected ? `
+                            <div class="printer-actions">
+                                <button class="btn-secondary" onclick="window.testPrint()"><i class="fas fa-flask"></i> Tes Print</button>
+                                <button class="btn-secondary" style="color:#ef4444;border-color:#fecaca" onclick="window.disconnectPrinter()"><i class="fas fa-unlink"></i> Putuskan</button>
+                            </div>
+                        ` : ''}
+                        
+                        <div style="margin-top:16px;font-size:12px;color:var(--text-light);line-height:1.7">
+                            <p style="font-weight:700;margin-bottom:8px;color:var(--text)">Persyaratan koneksi:</p>
+                            <ul style="padding-left:20px;display:grid;gap:6px">
+                                <li>Browser <b>Chrome</b> atau <b>Edge</b> versi terbaru (desktop/Android)</li>
+                                <li>Akses aplikasi via <b>HTTPS</b> (bukan HTTP)</li>
+                                <li>USB: printer thermal dengan kabel USB</li>
+                                <li>Bluetooth: printer thermal yang support BLE</li>
+                                <li>Saat dialog muncul, pilih printer lalu klik "Hubungkan"</li>
+                            </ul>
+                        </div>
+                        
+                        <div class="printer-tip">
+                            <i class="fas fa-circle-info"></i>
+                            <b>Auto-reconnect aktif.</b> Setelah berhasil terhubung, browser mengingat izin printer. Aplikasi akan menyambung ulang otomatis jika: (1) halaman dimuat ulang, (2) printer dicabut lalu dicolok lagi, (3) Bluetooth dimatikan lalu dinyalakan lagi. Tidak perlu klik "Hubungkan" berulang kali.
+                        </div>
+                        
+                        ${!supportsUSB && !supportsBT ? `<div class="printer-warn"><i class="fas fa-triangle-exclamation"></i>Browser ini tidak mendukung Web USB / Web Bluetooth. Gunakan Chrome atau Edge terbaru via HTTPS untuk mengaktifkan fitur ini.</div>` : ''}
+                    </div>
+                `;
             } else {
                 const tax = s.tax || {};
                 content.innerHTML = `<div class="settings-card"><h3><i class="fas fa-percent"></i> Pajak</h3><div class="input-group"><label>Aktifkan Pajak</label><select id="settingTaxEnabled"><option value="true" ${tax.enabled ? 'selected' : ''}>Ya</option><option value="false" ${!tax.enabled ? 'selected' : ''}>Tidak</option></select></div><div class="input-group"><label>Rate (%)</label><input type="number" id="settingTaxRate" min="0" max="100" value="${Number(tax.rate || 0)}"></div><p style="font-size:12px;color:var(--text-light);margin-bottom:10px">Catatan: pajak belum dihitung di kasir (tax = 0).</p><button class="btn-primary" onclick="window.saveSettings('tax')"><i class="fas fa-save"></i> Simpan</button></div>`;
@@ -1894,10 +1946,278 @@ ${state.exportData.expenses.map(e => `<tr><td>${new Date(e.created_at).toLocaleS
     window.closeModal = function (id) { document.getElementById(id)?.classList.remove('active'); };
     document.addEventListener('click', e => { if (e.target.classList.contains('modal-overlay') && !e.target.classList.contains('no-dismiss')) e.target.classList.remove('active'); });
 
+    /* ---------- Printer (USB / Bluetooth) dengan auto-reconnect ---------- */
+    const PRINTER_STORAGE_KEY = 'masuspace-printer';
+
+    // Filter Web USB umum untuk printer thermal (class 7) + VID populer
+    const USB_FILTERS = [
+        { classCode: 7 }, // USB Printer class
+        { vendorId: 0x04b8 }, // Epson
+        { vendorId: 0x0519 }, // Star Micronics
+        { vendorId: 0x0fe6 }, // ICS Advent
+        { vendorId: 0x154f }, // SNBC
+        { vendorId: 0x0dd4 }, // Custom
+        { vendorId: 0x20d1 }, // Rongta
+        { vendorId: 0x1fc9 }, // NXP
+        { vendorId: 0x0416 }, // Winbond
+        { vendorId: 0x1504 }, // Bixolon
+        { vendorId: 0x0a1b }, // Seiko
+        { vendorId: 0x0d28 }  // Makino
+    ];
+
+    function savePrinterState() {
+        if (!state.printer.type) { localStorage.removeItem(PRINTER_STORAGE_KEY); return; }
+        const p = { type: state.printer.type, name: state.printer.name };
+        if (state.printer.type === 'usb') { p.vendorId = state.printer.vendorId; p.productId = state.printer.productId; }
+        if (state.printer.type === 'bluetooth') { p.id = state.printer.id; }
+        try { localStorage.setItem(PRINTER_STORAGE_KEY, JSON.stringify(p)); } catch (e) { console.error(e); }
+    }
+
+    // ESC/POS bytes untuk tes print
+    function escposTest() {
+        const enc = new TextEncoder();
+        return enc.encode(
+            '\x1B\x40' +                                  // INIT
+            '\x1B\x21\x30' +                              // Double width & height
+            'MASUSPACE POS\n' +
+            '\x1B\x21\x00' +                              // Normal
+            '================\n' +
+            'Test Print Berhasil!\n' +
+            'Printer: ' + (state.printer.name || '-') + '\n' +
+            'Tanggal: ' + new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' }) + '\n' +
+            '================\n' +
+            '\x1B\x64\x03' +                              // Feed 3 lines
+            '\x1D\x56\x00'                                // Full cut
+        );
+    }
+
+    async function writeToUSBPrinter(device, data) {
+        // Cari endpoint OUT bulk di interface 0
+        const iface = device.configuration.interfaces[0];
+        const ep = iface.alternates[0].endpoints.find(e => e.direction === 'out' && e.type === 'bulk');
+        const endpointNumber = ep ? ep.endpointNumber : 1;
+        await device.transferOut(endpointNumber, data);
+    }
+
+    async function writeToBluetoothPrinter(device, data) {
+        if (!device.gatt?.connected) await device.gatt.connect();
+        const services = await device.gatt.getPrimaryServices();
+        // Cari characteristic yang writable (umumnya 0x2af6 'printer' atau 0xff02 untuk beberapa printer)
+        let writable = null;
+        for (const svc of services) {
+            const chars = await svc.getCharacteristics();
+            const c = chars.find(ch => ch.properties.write || ch.properties.writeWithoutResponse);
+            if (c) { writable = c; break; }
+        }
+        if (!writable) throw new Error('Tidak ada karakteristik printer yang bisa ditulis');
+        // Chunk 20 byte (MTU default BLE) supaya stabil
+        const chunkSize = writable.properties.writeWithoutResponse && !writable.properties.write ? 180 : 20;
+        for (let i = 0; i < data.byteLength; i += chunkSize) {
+            const chunk = data.slice(i, i + chunkSize);
+            if (writable.properties.writeWithoutResponse) {
+                await writable.writeValueWithoutResponse(chunk);
+            } else {
+                await writable.writeValueWithResponse(chunk);
+            }
+        }
+    }
+
+    async function sendToPrinter(data) {
+        if (!state.printer.device) throw new Error('Printer belum terhubung');
+        if (state.printer.type === 'usb') return await writeToUSBPrinter(state.printer.device, data);
+        if (state.printer.type === 'bluetooth') return await writeToBluetoothPrinter(state.printer.device, data);
+        throw new Error('Tipe printer tidak dikenal');
+    }
+
+    // Reconnect GATT kalau Bluetooth printer terputus (misalnya idle/sleep)
+    function attachBluetoothReconnectHandler(device) {
+        device.addEventListener('gattserverdisconnected', async () => {
+            console.log('Bluetooth printer disconnected, will retry in 2s...');
+            // Jangan ubah state.printer.device supaya bisa dipakai lagi
+            let attempts = 0;
+            const tryReconnect = async () => {
+                if (attempts > 10) { console.warn('Gagal reconnect BT setelah 10x.'); return; }
+                attempts++;
+                try {
+                    await device.gatt.connect();
+                    console.log('Bluetooth printer reconnected on attempt', attempts);
+                    if (typeof showToast === 'function') showToast('Printer Bluetooth tersambung kembali');
+                } catch (e) {
+                    setTimeout(tryReconnect, 2000);
+                }
+            };
+            setTimeout(tryReconnect, 2000);
+        });
+    }
+
+    window.connectUSBPrinter = async function () {
+        if (!navigator.usb) { showToast('Browser tidak mendukung Web USB. Gunakan Chrome/Edge via HTTPS.', true); return; }
+        try {
+            const device = await navigator.usb.requestDevice({ filters: USB_FILTERS });
+            await device.open();
+            if (device.configuration === null) await device.selectConfiguration(1);
+            await device.claimInterface(0);
+            state.printer = {
+                type: 'usb', device,
+                name: device.productName || `USB Printer ${device.vendorId.toString(16).padStart(4, '0')}:${device.productId.toString(16).padStart(4, '0')}`,
+                vendorId: device.vendorId, productId: device.productId, id: null
+            };
+            savePrinterState();
+            showToast('Printer USB terhubung: ' + state.printer.name);
+            loadSettings();
+        } catch (e) {
+            if (e.name === 'NotFoundError') showToast('Tidak ada printer dipilih.', true);
+            else showToast('Gagal menghubungkan USB: ' + (e.message || 'Unknown'), true);
+            console.error(e);
+        }
+    };
+
+    window.connectBluetoothPrinter = async function () {
+        if (!navigator.bluetooth) { showToast('Browser tidak mendukung Web Bluetooth. Gunakan Chrome/Edge via HTTPS.', true); return; }
+        try {
+            const device = await navigator.bluetooth.requestDevice({
+                acceptAllDevices: true,
+                optionalServices: ['printer', 'device_information', 'generic_access', '000018f0-0000-1000-8000-00805f9b34fb'] // 18f0 = printer umum
+            });
+            await device.gatt.connect();
+            attachBluetoothReconnectHandler(device);
+            state.printer = { type: 'bluetooth', device, name: device.name || 'Bluetooth Printer', vendorId: null, productId: null, id: device.id };
+            savePrinterState();
+            showToast('Printer Bluetooth terhubung: ' + state.printer.name);
+            loadSettings();
+        } catch (e) {
+            if (e.name === 'NotFoundError') showToast('Tidak ada printer dipilih.', true);
+            else showToast('Gagal menghubungkan Bluetooth: ' + (e.message || 'Unknown'), true);
+            console.error(e);
+        }
+    };
+
+    window.disconnectPrinter = async function () {
+        try {
+            if (state.printer.type === 'usb' && state.printer.device) {
+                try { await state.printer.device.close(); } catch (e) { /* ignore */ }
+            } else if (state.printer.type === 'bluetooth' && state.printer.device?.gatt?.connected) {
+                state.printer.device.gatt.disconnect();
+            }
+        } catch (e) { console.error(e); }
+        state.printer = { type: null, device: null, name: null, vendorId: null, productId: null, id: null };
+        localStorage.removeItem(PRINTER_STORAGE_KEY);
+        showToast('Printer diputus');
+        loadSettings();
+    };
+
+    window.testPrint = async function () {
+        if (!state.printer.device) { showToast('Printer belum terhubung.', true); return; }
+        try {
+            await sendToPrinter(escposTest());
+            showToast('Tes print berhasil dikirim ke ' + state.printer.name);
+        } catch (e) {
+            console.error(e);
+            showToast('Tes print gagal: ' + (e.message || 'Unknown'), true);
+            // Kalau Bluetooth, coba reconnect otomatis
+            if (state.printer.type === 'bluetooth' && state.printer.device) {
+                try { await state.printer.device.gatt.connect(); } catch (ee) {}
+            }
+        }
+    };
+
+    // Auto-reconnect: panggil saat app start
+    async function reconnectPrinter() {
+        const saved = localStorage.getItem(PRINTER_STORAGE_KEY);
+        if (!saved) return;
+        let p;
+        try { p = JSON.parse(saved); } catch (e) { return; }
+        try {
+            if (p.type === 'usb' && navigator.usb) {
+                const devices = await navigator.usb.getDevices();
+                const match = devices.find(d => d.vendorId === p.vendorId && d.productId === p.productId);
+                if (match) {
+                    await match.open();
+                    if (match.configuration === null) await match.selectConfiguration(1);
+                    await match.claimInterface(0);
+                    state.printer = { type: 'usb', device: match, name: p.name, vendorId: p.vendorId, productId: p.productId, id: null };
+                    console.log('Printer USB auto-reconnect:', p.name);
+                }
+            } else if (p.type === 'bluetooth' && navigator.bluetooth) {
+                // navigator.bluetooth.getDevices() (Chrome 95+)
+                if (navigator.bluetooth.getDevices) {
+                    const devices = await navigator.bluetooth.getDevices();
+                    const match = devices.find(d => d.id === p.id || d.name === p.name);
+                    if (match) {
+                        attachBluetoothReconnectHandler(match);
+                        await match.gatt.connect();
+                        state.printer = { type: 'bluetooth', device: match, name: p.name, vendorId: null, productId: null, id: p.id || match.id };
+                        console.log('Printer Bluetooth auto-reconnect:', p.name);
+                    }
+                } else {
+                    // Fallback: state.printer dipakai tapi device handle null; user klik Tes Print akan meminta re-grant
+                    console.warn('Browser tidak mendukung navigator.bluetooth.getDevices() — user perlu klik Hubungkan Bluetooth sekali lagi.');
+                    state.printer = { type: 'bluetooth', device: null, name: p.name, vendorId: null, productId: null, id: p.id };
+                }
+            }
+        } catch (e) {
+            console.error('Printer auto-reconnect gagal:', e);
+        }
+    }
+
+    // USB plug/unplug listener — auto-reconnect fisik
+    if (navigator.usb) {
+        navigator.usb.addEventListener('connect', e => {
+            const saved = localStorage.getItem(PRINTER_STORAGE_KEY);
+            if (!saved) return;
+            try {
+                const p = JSON.parse(saved);
+                if (p.type === 'usb' && p.vendorId === e.device.vendorId && p.productId === e.device.productId) {
+                    console.log('USB printer plugged back, reconnecting...');
+                    reconnectPrinter().then(() => { if (state.currentPage === 'settings') loadSettings(); });
+                }
+            } catch (err) { /* ignore */ }
+        });
+        navigator.usb.addEventListener('disconnect', e => {
+            if (state.printer.type === 'usb' && state.printer.device === e.device) {
+                state.printer.device = null;
+                console.warn('Printer USB fisik dicabut. Akan auto-reconnect saat dicolok lagi.');
+                if (state.currentPage === 'settings') loadSettings();
+                // Tetap simpan saved state (jangan hapus localStorage) supaya bisa reconnect
+            }
+        });
+    }
+
+    // Bluetooth availability listener — auto-reconnect saat adapter nyala
+    if (navigator.bluetooth) {
+        navigator.bluetooth.addEventListener('availabilitychanged', e => {
+            if (e.value && localStorage.getItem(PRINTER_STORAGE_KEY)) {
+                console.log('Bluetooth available again, reconnecting printer...');
+                reconnectPrinter().then(() => { if (state.currentPage === 'settings') loadSettings(); });
+            } else if (!e.value && state.printer.type === 'bluetooth') {
+                console.warn('Bluetooth adapter off. Akan reconnect saat nyala lagi.');
+                state.printer.device = null;
+                if (state.currentPage === 'settings') loadSettings();
+            }
+        });
+    }
+
+    // Helper publik supaya receipt/order detail bisa langsung cetak ke printer thermal
+    window.printToThermalPrinter = async function (text) {
+        if (!state.printer.device) return false;
+        try {
+            const enc = new TextEncoder();
+            await sendToPrinter(enc.encode('\x1B\x40' + text + '\n\x1B\x64\x03\x1D\x56\x00'));
+            return true;
+        } catch (e) {
+            console.error('Print thermal gagal:', e);
+            return false;
+        }
+    };
+    window.isThermalPrinterConnected = function () { return !!state.printer.device; };
+    window.getPrinterName = function () { return state.printer.name || null; };
+
     document.addEventListener('DOMContentLoaded', function () {
         applyBrandLogo(localStorage.getItem('masuspace-logo'));
         loadUsersToDropdown();
         if (!RECOVERY_LINK) window.restoreOwnerSession();
+        // Auto-reconnect printer USB/Bluetooth yang sudah pernah disambung
+        setTimeout(reconnectPrinter, 800);
         // Hapus isian password otomatis dari browser (autofill muncul sedikit terlambat)
         [150, 600].forEach(ms => setTimeout(() => { const pw = document.getElementById('loginPassword'); if (pw && document.activeElement !== pw) pw.value = ''; }, ms));
         bindDateFilter(['dashboardStartDate', 'dashboardEndDate'], loadDashboard);
