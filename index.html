@@ -208,34 +208,58 @@
                         <button class="btn-secondary" onclick="window.printExportReport()" id="btnExportPrint" disabled><i class="fas fa-print"></i> Print</button>
                     </div>
 
-                    <div class="stats-grid compact" id="exportStats">
+                    <div class="stats-grid compact" id="exportStats" style="grid-template-columns:repeat(4,1fr)">
                         <div class="stat-card"><div class="stat-icon"><i class="fas fa-shopping-bag"></i></div><div class="stat-info"><div class="stat-label">Total Order</div><div class="stat-value" id="expStatOrders">0</div></div></div>
                         <div class="stat-card"><div class="stat-icon"><i class="fas fa-money-bill-wave"></i></div><div class="stat-info"><div class="stat-label">Total Penjualan</div><div class="stat-value" id="expStatRevenue">Rp 0</div></div></div>
-                        <div class="stat-card"><div class="stat-icon"><i class="fas fa-money-bill"></i></div><div class="stat-info"><div class="stat-label">Cash</div><div class="stat-value" id="expStatCash">Rp 0</div></div></div>
+                        <div class="stat-card"><div class="stat-icon"><i class="fas fa-money-bill"></i></div><div class="stat-info"><div class="stat-label">Cash Sales</div><div class="stat-value" id="expStatCash">Rp 0</div></div></div>
                         <div class="stat-card"><div class="stat-icon"><i class="fas fa-qrcode"></i></div><div class="stat-info"><div class="stat-label">QRIS</div><div class="stat-value" id="expStatQris">Rp 0</div></div></div>
                         <div class="stat-card"><div class="stat-icon"><i class="fas fa-credit-card"></i></div><div class="stat-info"><div class="stat-label">Debit</div><div class="stat-value" id="expStatDebit">Rp 0</div></div></div>
+                        <div class="stat-card"><div class="stat-icon"><i class="fas fa-arrow-trend-down"></i></div><div class="stat-info"><div class="stat-label">Pengeluaran</div><div class="stat-value" id="expStatExpense" style="color:#ef4444">Rp 0</div></div></div>
+                        <div class="stat-card"><div class="stat-icon"><i class="fas fa-vault"></i></div><div class="stat-info"><div class="stat-label">Cash Real</div><div class="stat-value" id="expStatCashReal" style="color:var(--primary-dark)">Rp 0</div></div></div>
                         <div class="stat-card"><div class="stat-icon"><i class="fas fa-calendar-day"></i></div><div class="stat-info"><div class="stat-label">Hari Aktif</div><div class="stat-value" id="expStatDays">0</div></div></div>
+                    </div>
+
+                    <div class="export-info-card" style="background:var(--primary-50);border-color:var(--primary)">
+                        <div style="display:flex;align-items:start;gap:10px">
+                            <i class="fas fa-circle-info" style="color:var(--primary);font-size:18px;margin-top:2px"></i>
+                            <div>
+                                <p style="font-weight:700;margin-bottom:4px">Rumus Cash Real</p>
+                                <p style="font-size:12px;color:var(--text-light);line-height:1.5"><b>Cash Real</b> = Cash Sales (penjualan tunai) − Total Pengeluaran. Angka ini menunjukkan uang fisik yang seharusnya ada di laci kasir pada periode tersebut.</p>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="export-section">
                         <h3><i class="fas fa-list-ol"></i> Ringkasan per Tanggal</h3>
                         <div class="table-container">
                             <table class="data-table">
-                                <thead><tr><th>Tanggal</th><th>Jumlah Order</th><th>Cash</th><th>QRIS</th><th>Debit</th><th>Total Penjualan</th></tr></thead>
+                                <thead><tr><th>Tanggal</th><th>Order</th><th>Cash</th><th>QRIS</th><th>Debit</th><th>Penjualan</th><th>Pengeluaran</th><th>Cash Real</th></tr></thead>
                                 <tbody id="exportDailyBody">
-                                    <tr><td colspan="6" style="text-align:center;padding:30px;color:var(--text-light)">Klik "Load Data" untuk menampilkan transaksi</td></tr>
+                                    <tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text-light)">Klik "Load Data" untuk menampilkan transaksi</td></tr>
                                 </tbody>
                             </table>
                         </div>
                     </div>
 
                     <div class="export-section">
-                        <h3><i class="fas fa-receipt"></i> Detail Transaksi</h3>
+                        <h3><i class="fas fa-receipt"></i> Detail Transaksi Penjualan</h3>
                         <div class="table-container">
                             <table class="data-table">
                                 <thead><tr><th>Tanggal & Waktu</th><th>No. Order</th><th>Tipe</th><th>Customer</th><th>Menu</th><th>Metode</th><th>Total</th></tr></thead>
                                 <tbody id="exportDetailBody">
                                     <tr><td colspan="7" style="text-align:center;padding:30px;color:var(--text-light)">Klik "Load Data" untuk menampilkan transaksi</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="export-section">
+                        <h3><i class="fas fa-minus-circle" style="color:#ef4444"></i> Detail Pengeluaran</h3>
+                        <div class="table-container">
+                            <table class="data-table">
+                                <thead><tr><th>Tanggal & Waktu</th><th>Kategori</th><th>Deskripsi</th><th>Sumber Kas</th><th>Jumlah</th></tr></thead>
+                                <tbody id="exportExpenseBody">
+                                    <tr><td colspan="5" style="text-align:center;padding:30px;color:var(--text-light)">Klik "Load Data" untuk menampilkan transaksi</td></tr>
                                 </tbody>
                             </table>
                         </div>
