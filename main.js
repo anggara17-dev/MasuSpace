@@ -634,6 +634,66 @@
         w.document.close();
         w.print();
     }
+
+    /* ---------- ESC/POS builder untuk thermal printer ---------- */
+    // Konversi data struk (format receiptHtml) jadi string ESC/POS 58mm (32 kolom)
+    function buildEscPosText(r) {
+        const W = 32; // lebar kertas 58mm
+        const center = t => {
+            const pad = Math.max(0, (W - t.length) / 2 | 0);
+            return ' '.repeat(pad) + t;
+        };
+        const right = t => ' '.repeat(Math.max(0, W - t.length)) + t;
+        // wrap item name + price (kolom kiri 20, kanan 12)
+        const line = (a, b) => {
+            const maxA = W - b.length - 1;
+            const aa = a.length > maxA ? a.slice(0, maxA) : a;
+            return aa + ' ' + right(b);
+        };
+        let out = '';
+        out += '\x1B\x40'; // init
+        out += '\x1B\x21\x30'; // double width+height
+        out += center('MASUSPACE') + '\n';
+        out += '\x1B\x21\x00'; // normal
+        out += center('Coffee Shop') + '\n';
+        out += center(r.dateLabel) + '\n';
+        out += center(r.number) + '\n';
+        if (r.extraHeader) out += r.extraHeader; // sudah ada \n di tiap baris
+        out += '-'.repeat(W) + '\n';
+        r.items.forEach(i => {
+            out += `${i.name} x${i.qty}\n`;
+            out += line('  ' + (i.detail ? i.detail.slice(0, 18) : formatRp(i.unit_price)), formatRp(i.unit_price * i.qty)) + '\n';
+        });
+        out += '-'.repeat(W) + '\n';
+        out += line('Subtotal', formatRp(r.subtotal)) + '\n';
+        if (r.discount > 0) out += line('Diskon', '-' + formatRp(r.discount)) + '\n';
+        out += '\x1B\x21\x20'; // double width
+        out += line('TOTAL', formatRp(r.total)) + '\n';
+        out += '\x1B\x21\x00'; // normal
+        out += line('Bayar (' + String(r.method).toUpperCase() + ')', formatRp(r.paid)) + '\n';
+        if (r.method === 'cash') out += line('Kembali', formatRp(r.change)) + '\n';
+        out += '-'.repeat(W) + '\n';
+        out += center('Terima kasih!') + '\n';
+        out += center('Selamat menikmati') + '\n';
+        out += '\x1B\x64\x03'; // feed 3 lines
+        out += '\x1D\x56\x00'; // full cut
+        return out;
+    }
+
+    // Cetak struk: kalau printer thermal terhubung → kirim ESC/POS; kalau tidak → fallback browser print
+    async function printReceiptToEither(receiptData, fallbackContentSelector) {
+        if (window.isThermalPrinterConnected && window.isThermalPrinterConnected()) {
+            try {
+                const ok = await window.printToThermalPrinter(buildEscPosText(receiptData));
+                if (ok) {
+                    showToast('Struk dicetak ke ' + window.getPrinterName());
+                    return;
+                }
+            } catch (e) { console.error('Thermal print gagal, fallback ke browser:', e); }
+        }
+        // Fallback: print browser popup
+        printHtml(document.querySelector(fallbackContentSelector).innerHTML);
+    }
     window.showReceipt = function () {
         const r = state.currentReceipt;
         if (!r) return;
@@ -645,7 +705,17 @@
         });
         document.getElementById('receiptModal').classList.add('active');
     };
-    window.printReceipt = function () { printHtml(document.getElementById('receiptContent').innerHTML); };
+    window.printReceipt = function () {
+        const r = state.currentReceipt;
+        if (!r) return;
+        const receiptData = {
+            dateLabel: getJakartaDate(), number: r.order_number,
+            items: r.items.map(i => ({ name: i.name, qty: i.qty, unit_price: i.unit_price, detail: i.notes || '' })),
+            subtotal: r.subtotal, discount: r.discount, total: r.total,
+            method: r.payment_method, paid: r.cash_received, change: r.change
+        };
+        printReceiptToEither(receiptData, '#receiptContent');
+    };
 
     /* ---------- Draft order (disimpan di browser perangkat ini) ---------- */
     const heldOrdersStorageKey = 'masuspace-held-orders';
@@ -924,6 +994,7 @@
     };
 
     window.viewOrderDetail = async function (orderId) {
+        window._lastOrderDetailId = orderId;
         const [orderRes, itemRes] = await Promise.all([
             supabase.from('orders').select('*, app_users(full_name)').eq('id', orderId).single(),
             supabase.from('order_items').select('*, products(name)').eq('order_id', orderId)
@@ -942,7 +1013,24 @@
         });
         document.getElementById('orderDetailModal').classList.add('active');
     };
-    window.printOrderDetail = function () { printHtml(document.getElementById('orderDetailContent').innerHTML); };
+    window.printOrderDetail = async function () {
+        // Ambil data order dari content yang sudah dirender
+        const orderRes = await supabase.from('orders').select('*, app_users(full_name)').eq('id', window._lastOrderDetailId || '').single().maybeSingle();
+        const itemRes = await supabase.from('order_items').select('*, products(name)').eq('order_id', window._lastOrderDetailId || '');
+        const order = orderRes.data || {};
+        const items = (itemRes.data || []).map(i => ({ name: i.products?.name || 'Produk', qty: i.qty, unit_price: Number(i.unit_price), detail: i.notes || '' }));
+        const sub = items.reduce((s, i) => s + i.unit_price * i.qty, 0);
+        const total = Number(order.total || 0);
+        const receiptData = {
+            dateLabel: new Date(order.created_at).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' }),
+            number: order.order_number,
+            extraHeader: `Kasir: ${order.app_users?.full_name || '-'}\nCustomer: ${order.customer_name || 'Walk-in'}\n`,
+            items, subtotal: sub, discount: Math.max(0, sub - total), total,
+            method: order.payment_method || 'cash',
+            paid: Number(order.paid_amount || total), change: Number(order.change_amount || 0)
+        };
+        printReceiptToEither(receiptData, '#orderDetailContent');
+    };
 
     // Order lunas terhubung ke kas, jurnal, dan stok, jadi tidak boleh diubah/dihapus langsung dari tabel
     async function guardOrderChange(orderId, label) {
