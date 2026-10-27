@@ -15,7 +15,7 @@
     supabase.auth.onAuthStateChange(event => { if (event === 'PASSWORD_RECOVERY') window.openResetModal(); });
     document.addEventListener('submit', function (e) { e.preventDefault(); return false; });
 
-    const OWNER_ONLY_PAGES = ['menu', 'categories', 'inventory', 'cash', 'reports', 'settings'];
+    const OWNER_ONLY_PAGES = ['menu', 'categories', 'inventory', 'cash', 'reports', 'export', 'settings'];
     let state = {
         currentUser: null, authUserId: null, currentPage: 'dashboard',
         cart: [], categories: [], products: [], variants: [], addons: [],
@@ -259,7 +259,7 @@
     });
 
     /* ---------- Navigasi ---------- */
-    const PAGE_TITLES = { dashboard: 'Dashboard', kasir: 'Kasir POS', orders: 'Riwayat Order', menu: 'Menu & Stok', cash: 'Kas & Bank', reports: 'Laporan', settings: 'Pengaturan' };
+    const PAGE_TITLES = { dashboard: 'Dashboard', kasir: 'Kasir POS', orders: 'Riwayat Order', menu: 'Menu & Stok', cash: 'Kas & Bank', reports: 'Laporan', export: 'Export Transaksi', settings: 'Pengaturan' };
     window.navigate = async function (page) {
         if (!PAGE_TITLES[page]) return false;
         if (state.currentUser?.role === 'kasir' && OWNER_ONLY_PAGES.includes(page)) { showToast('Halaman ini khusus Owner.', true); return false; }
@@ -268,7 +268,7 @@
         document.getElementById(`page-${page}`)?.classList.add('active');
         document.querySelectorAll('.nav-item[data-page]').forEach(n => n.classList.toggle('active', n.dataset.page === page));
         document.getElementById('pageTitle').innerText = PAGE_TITLES[page];
-        const loaders = { dashboard: loadDashboard, kasir: loadKasirData, orders: loadOrders, menu: loadMenuHub, cash: loadCash, reports: loadReports, settings: loadSettings };
+        const loaders = { dashboard: loadDashboard, kasir: loadKasirData, orders: loadOrders, menu: loadMenuHub, cash: loadCash, reports: loadReports, export: loadExportPage, settings: loadSettings };
         try { await loaders[page](); } catch (error) { console.error(error); showToast('Gagal memuat halaman: ' + error.message, true); }
         if (window.innerWidth <= 1024) document.getElementById('sidebar').classList.add('collapsed');
         window.closeUserMenu();
@@ -1043,6 +1043,275 @@
 
 /* ===== AKHIR PART 5 ===== */
 /* =====================================================================
+   PART 5.5: Export Transaksi Penjualan (per tanggal)
+   ===================================================================== */
+
+    let exportRequestId = 0;
+    let exportFilterTimer;
+    state.exportData = { orders: [], daily: [], summary: null };
+
+    async function loadExportPage() {
+        const startEl = document.getElementById('exportStartDate');
+        const endEl = document.getElementById('exportEndDate');
+        if (!startEl.value) startEl.value = getTodayJakarta();
+        if (!endEl.value) endEl.value = getTodayJakarta();
+        // Auto-load data pertama kali halaman dibuka
+        await window.loadExportData();
+    }
+    window.loadExportPage = loadExportPage;
+
+    window.setExportPreset = function (preset) {
+        clearTimeout(exportFilterTimer);
+        const today = getTodayJakarta();
+        document.getElementById('exportStartDate').value = preset === 'week' ? getJakartaDateDaysAgo(6) : preset === 'month' ? getJakartaMonthStart() : today;
+        document.getElementById('exportEndDate').value = today;
+        window.loadExportData();
+    };
+    window.applyExportFilter = function () { clearTimeout(exportFilterTimer); exportFilterTimer = setTimeout(window.loadExportData, 180); };
+
+    window.loadExportData = async function () {
+        const requestId = ++exportRequestId;
+        const start = document.getElementById('exportStartDate').value;
+        const end = document.getElementById('exportEndDate').value;
+        if (!start || !end) { showToast('Pilih tanggal awal & akhir dulu.', true); return; }
+        if (start > end) { showToast('Tanggal awal tidak boleh melewati tanggal akhir.', true); return; }
+
+        // Disable tombol export selagi loading
+        ['btnExportExcel', 'btnExportCSV', 'btnExportPrint'].forEach(id => { const b = document.getElementById(id); if (b) b.disabled = true; });
+        document.getElementById('exportDailyBody').innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px">Memuat data...</td></tr>';
+        document.getElementById('exportDetailBody').innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px">Memuat data...</td></tr>';
+
+        try {
+            const orders = await fetchOrders(
+                dayStartISO(start),
+                dayEndExclusiveISO(end),
+                { statuses: PAID_STATUS, cols: 'id,order_number,total,payment_method,created_at,customer_name,order_type', limit: 2000 }
+            );
+            if (requestId !== exportRequestId) return;
+
+            // Group by tanggal (Jakarta)
+            const byDate = new Map();
+            let totalRev = 0, totalCash = 0, totalQris = 0, totalDebit = 0;
+            orders.forEach(o => {
+                const t = Number(o.total || 0);
+                const key = new Date(o.created_at).toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta' });
+                const r = byDate.get(key) || { n: 0, cash: 0, qris: 0, debit: 0, total: 0, ts: new Date(o.created_at).getTime() };
+                r.n++; r.total += t; totalRev += t;
+                if (['cash', 'qris', 'debit'].includes(o.payment_method)) r[o.payment_method] += t;
+                if (o.payment_method === 'cash') totalCash += t;
+                else if (o.payment_method === 'qris') totalQris += t;
+                else if (o.payment_method === 'debit') totalDebit += t;
+                byDate.set(key, r);
+            });
+
+            const dailyArr = [...byDate.entries()].sort((a, b) => b[1].ts - a[1].ts);
+            state.exportData = { orders, daily: dailyArr, summary: { total: totalRev, cash: totalCash, qris: totalQris, debit: totalDebit, count: orders.length, days: dailyArr.length } };
+
+            // Stats card
+            document.getElementById('expStatOrders').innerText = orders.length;
+            document.getElementById('expStatRevenue').innerText = formatRp(totalRev);
+            document.getElementById('expStatCash').innerText = formatRp(totalCash);
+            document.getElementById('expStatQris').innerText = formatRp(totalQris);
+            document.getElementById('expStatDebit').innerText = formatRp(totalDebit);
+            document.getElementById('expStatDays').innerText = dailyArr.length;
+
+            // Daily table
+            document.getElementById('exportDailyBody').innerHTML = dailyArr.length
+                ? dailyArr.map(([d, r]) => `<tr><td><b>${escapeHtml(d)}</b></td><td>${r.n}</td><td>${formatRp(r.cash)}</td><td>${formatRp(r.qris)}</td><td>${formatRp(r.debit)}</td><td><b>${formatRp(r.total)}</b></td></tr>`).join('')
+                    + `<tr style="background:var(--primary-50);font-weight:800"><td>TOTAL</td><td>${orders.length}</td><td>${formatRp(totalCash)}</td><td>${formatRp(totalQris)}</td><td>${formatRp(totalDebit)}</td><td>${formatRp(totalRev)}</td></tr>`
+                : '<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--text-light)">Tidak ada transaksi pada rentang tanggal ini</td></tr>';
+
+            // Detail table
+            document.getElementById('exportDetailBody').innerHTML = orders.length
+                ? orders.map(o => {
+                    const menus = (o.order_items || []).map(i => `${escapeHtml(i.products?.name || 'Produk')} × ${Number(i.qty || 0)}`).join(', ') || '-';
+                    const methodBadge = o.payment_method === 'cash' ? 'success' : o.payment_method === 'qris' ? 'info' : 'warning';
+                    return `<tr><td>${new Date(o.created_at).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', dateStyle: 'short', timeStyle: 'short' })}</td><td><b>${escapeHtml(o.order_number || '-')}</b></td><td><span class="badge badge-info">${escapeHtml(o.order_type || '-')}</span></td><td>${escapeHtml(o.customer_name || 'Walk-in')}</td><td>${menus}</td><td><span class="badge badge-${methodBadge}">${escapeHtml((o.payment_method || '-').toUpperCase())}</span></td><td><b>${formatRp(Number(o.total || 0))}</b></td></tr>`;
+                }).join('')
+                : '<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--text-light)">Tidak ada transaksi pada rentang tanggal ini</td></tr>';
+
+            // Enable tombol export jika ada data
+            if (orders.length > 0) {
+                ['btnExportExcel', 'btnExportCSV', 'btnExportPrint'].forEach(id => { const b = document.getElementById(id); if (b) b.disabled = false; });
+            }
+        } catch (error) {
+            console.error(error);
+            showToast('Gagal memuat data export: ' + error.message, true);
+            document.getElementById('exportDailyBody').innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:#ef4444">Gagal memuat data</td></tr>';
+            document.getElementById('exportDetailBody').innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:#ef4444">Gagal memuat data</td></tr>';
+        }
+    };
+
+    // Export ke Excel (.xlsx) - 2 sheet: Ringkasan & Detail
+    window.exportToExcel = function () {
+        if (!state.exportData.orders.length) { showToast('Tidak ada data untuk diexport. Klik Load Data dulu.', true); return; }
+        if (typeof XLSX === 'undefined') { showToast('Library Excel (SheetJS) belum termuat. Cek koneksi internet.', true); return; }
+
+        const start = document.getElementById('exportStartDate').value;
+        const end = document.getElementById('exportEndDate').value;
+        const periodLabel = start === end ? start : `${start} s/d ${end}`;
+        const storeName = 'MASUSPACE Coffee';
+
+        // Sheet 1: Ringkasan per Tanggal
+        const summaryData = [
+            ['LAPORAN PENJUALAN - ' + storeName],
+            ['Periode', periodLabel],
+            ['Diexport', new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' }) + ' WIB'],
+            ['Oleh', state.currentUser?.full_name || '-'],
+            [],
+            ['RINGKASAN PER TANGGAL'],
+            ['Tanggal', 'Jumlah Order', 'Cash (Rp)', 'QRIS (Rp)', 'Debit (Rp)', 'Total Penjualan (Rp)']
+        ];
+        state.exportData.daily.forEach(([d, r]) => {
+            summaryData.push([d, r.n, r.cash, r.qris, r.debit, r.total]);
+        });
+        const s = state.exportData.summary;
+        summaryData.push(['TOTAL', s.count, s.cash, s.qris, s.debit, s.total]);
+        summaryData.push([]);
+        summaryData.push(['RINGKASAN METODE PEMBAYARAN']);
+        summaryData.push(['Metode', 'Jumlah Transaksi', 'Total (Rp)']);
+        summaryData.push(['Cash', state.exportData.orders.filter(o => o.payment_method === 'cash').length, s.cash]);
+        summaryData.push(['QRIS', state.exportData.orders.filter(o => o.payment_method === 'qris').length, s.qris]);
+        summaryData.push(['Debit', state.exportData.orders.filter(o => o.payment_method === 'debit').length, s.debit]);
+
+        // Sheet 2: Detail Transaksi
+        const detailData = [
+            ['No', 'Tanggal & Waktu', 'No. Order', 'Tipe Order', 'Customer', 'Daftar Menu', 'Metode Bayar', 'Total (Rp)']
+        ];
+        state.exportData.orders.forEach((o, idx) => {
+            const menus = (o.order_items || []).map(i => `${i.products?.name || 'Produk'} x${Number(i.qty || 0)}`).join('; ') || '-';
+            detailData.push([
+                idx + 1,
+                new Date(o.created_at).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' }),
+                o.order_number || '-',
+                o.order_type || '-',
+                o.customer_name || 'Walk-in',
+                menus,
+                (o.payment_method || '-').toUpperCase(),
+                Number(o.total || 0)
+            ]);
+        });
+        detailData.push([]);
+        detailData.push(['', '', '', '', '', '', 'TOTAL', s.total]);
+
+        const wb = XLSX.utils.book_new();
+        const ws1 = XLSX.utils.aoa_to_sheet(summaryData);
+        const ws2 = XLSX.utils.aoa_to_sheet(detailData);
+
+        // Set lebar kolom
+        ws1['!cols'] = [{ wch: 22 }, { wch: 14 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 20 }];
+        ws2['!cols'] = [{ wch: 5 }, { wch: 22 }, { wch: 16 }, { wch: 12 }, { wch: 16 }, { wch: 50 }, { wch: 14 }, { wch: 16 }];
+
+        XLSX.utils.book_append_sheet(wb, ws1, 'Ringkasan');
+        XLSX.utils.book_append_sheet(wb, ws2, 'Detail Transaksi');
+
+        const filename = `Export_Transaksi_${start}_sd_${end}.xlsx`;
+        XLSX.writeFile(wb, filename);
+        showToast('Excel berhasil diexport: ' + filename);
+    };
+
+    // Export ke CSV (data mentah detail transaksi)
+    window.exportToCSV = function () {
+        if (!state.exportData.orders.length) { showToast('Tidak ada data untuk diexport. Klik Load Data dulu.', true); return; }
+        const start = document.getElementById('exportStartDate').value;
+        const end = document.getElementById('exportEndDate').value;
+
+        const headers = ['Tanggal & Waktu', 'No. Order', 'Tipe Order', 'Customer', 'Daftar Menu', 'Metode Bayar', 'Total (Rp)'];
+        const rows = [headers];
+        state.exportData.orders.forEach(o => {
+            const menus = (o.order_items || []).map(i => `${i.products?.name || 'Produk'} x${Number(i.qty || 0)}`).join('; ') || '-';
+            rows.push([
+                new Date(o.created_at).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' }),
+                o.order_number || '-',
+                o.order_type || '-',
+                o.customer_name || 'Walk-in',
+                menus,
+                (o.payment_method || '-').toUpperCase(),
+                Number(o.total || 0)
+            ]);
+        });
+
+        // Tambahkan baris total
+        rows.push([]);
+        rows.push(['', '', '', '', '', 'TOTAL', state.exportData.summary.total]);
+
+        // Convert ke CSV dengan escape quote
+        const csv = rows.map(r => r.map(c => {
+            const v = String(c ?? '');
+            return /[",\n;]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v;
+        }).join(';')).join('\n');
+
+        // BOM utf-8 biar Excel baca karakter Indonesia dengan benar
+        const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Export_Transaksi_${start}_sd_${end}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showToast('CSV berhasil diexport.');
+    };
+
+    // Print laporan transaksi
+    window.printExportReport = function () {
+        if (!state.exportData.orders.length) { showToast('Tidak ada data untuk dicetak. Klik Load Data dulu.', true); return; }
+        const start = document.getElementById('exportStartDate').value;
+        const end = document.getElementById('exportEndDate').value;
+        const periodLabel = start === end ? start : `${start} s/d ${end}`;
+        const s = state.exportData.summary;
+
+        const html = `
+<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8"><title>Laporan Penjualan ${periodLabel}</title>
+<style>
+body{font-family:'Plus Jakarta Sans',Arial,sans-serif;padding:20px;color:#0f172a;font-size:12px}
+h1{text-align:center;font-size:20px;margin-bottom:4px}
+h2{font-size:14px;margin:18px 0 8px;border-bottom:2px solid #10b981;padding-bottom:4px}
+.sub{text-align:center;color:#64748b;margin-bottom:18px;font-size:12px}
+table{width:100%;border-collapse:collapse;margin-bottom:12px}
+th,td{border:1px solid #e2e8f0;padding:6px 8px;text-align:left;font-size:11px}
+th{background:#ecfdf5;font-weight:700;text-transform:uppercase;font-size:10px;color:#059669}
+tr.total{font-weight:800;background:#d1fae5}
+.summary{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:14px 0}
+.summary div{padding:10px;border:1px solid #e2e8f0;border-radius:8px;background:#f8fafc}
+.summary .lbl{font-size:10px;color:#64748b;text-transform:uppercase;font-weight:600}
+.summary .val{font-size:14px;font-weight:800;color:#0f172a;margin-top:2px}
+.foot{margin-top:24px;text-align:center;font-size:10px;color:#94a3b8}
+@media print{body{padding:0}}</style></head><body>
+<h1>MASUSPACE COFFEE</h1>
+<p class="sub">Laporan Transaksi Penjualan<br>Periode: ${periodLabel}<br>Diexport: ${new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })} WIB • Oleh: ${escapeHtml(state.currentUser?.full_name || '-')}</p>
+<div class="summary">
+<div><div class="lbl">Total Order</div><div class="val">${s.count}</div></div>
+<div><div class="lbl">Total Penjualan</div><div class="val">Rp ${s.total.toLocaleString('id-ID')}</div></div>
+<div><div class="lbl">Cash</div><div class="val">Rp ${s.cash.toLocaleString('id-ID')}</div></div>
+<div><div class="lbl">QRIS + Debit</div><div class="val">Rp ${(s.qris + s.debit).toLocaleString('id-ID')}</div></div>
+</div>
+<h2>Ringkasan per Tanggal</h2>
+<table><thead><tr><th>Tanggal</th><th>Order</th><th>Cash</th><th>QRIS</th><th>Debit</th><th>Total</th></tr></thead><tbody>
+${state.exportData.daily.map(([d, r]) => `<tr><td>${escapeHtml(d)}</td><td>${r.n}</td><td>Rp ${r.cash.toLocaleString('id-ID')}</td><td>Rp ${r.qris.toLocaleString('id-ID')}</td><td>Rp ${r.debit.toLocaleString('id-ID')}</td><td><b>Rp ${r.total.toLocaleString('id-ID')}</b></td></tr>`).join('')}
+<tr class="total"><td>TOTAL</td><td>${s.count}</td><td>Rp ${s.cash.toLocaleString('id-ID')}</td><td>Rp ${s.qris.toLocaleString('id-ID')}</td><td>Rp ${s.debit.toLocaleString('id-ID')}</td><td>Rp ${s.total.toLocaleString('id-ID')}</td></tr>
+</tbody></table>
+<h2>Detail Transaksi</h2>
+<table><thead><tr><th>No</th><th>Waktu</th><th>No. Order</th><th>Tipe</th><th>Customer</th><th>Menu</th><th>Metode</th><th>Total</th></tr></thead><tbody>
+${state.exportData.orders.map((o, i) => {
+    const menus = (o.order_items || []).map(it => `${escapeHtml(it.products?.name || 'Produk')} x${Number(it.qty || 0)}`).join(', ') || '-';
+    return `<tr><td>${i + 1}</td><td>${new Date(o.created_at).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', dateStyle: 'short', timeStyle: 'short' })}</td><td>${escapeHtml(o.order_number || '-')}</td><td>${escapeHtml(o.order_type || '-')}</td><td>${escapeHtml(o.customer_name || 'Walk-in')}</td><td>${menus}</td><td>${(o.payment_method || '-').toUpperCase()}</td><td><b>Rp ${Number(o.total || 0).toLocaleString('id-ID')}</b></td></tr>`;
+}).join('')}
+</tbody></table>
+<p class="foot">Laporan ini dibuat otomatis oleh MasuSpace POS — ${new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })}</p>
+</body></html>`;
+
+        const w = window.open('', '_blank');
+        if (!w) { showToast('Pop-up diblokir browser. Izinkan pop-up untuk mencetak.', true); return; }
+        w.document.write(html);
+        w.document.close();
+        w.focus();
+        setTimeout(() => { w.print(); }, 400);
+    };
+
+/* ===== AKHIR PART 5.5 ===== */
+/* =====================================================================
    PART 6 dari 6: Kas & Bank, pengaturan, penutup file
    ===================================================================== */
 
@@ -1557,6 +1826,7 @@
         bindDateFilter(['orderFilterStart', 'orderFilterEnd'], loadOrders);
         bindDateFilter(['reportStartDate', 'reportEndDate'], window.loadSalesReport);
         bindDateFilter(['cashFilterStart', 'cashFilterEnd'], loadCash);
+        bindDateFilter(['exportStartDate', 'exportEndDate'], window.loadExportData);
         document.getElementById('loginForm')?.addEventListener('submit', function (e) { e.preventDefault(); window.handleLogin(e); });
     });
 })();
