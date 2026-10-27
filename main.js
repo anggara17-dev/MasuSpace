@@ -1022,7 +1022,7 @@
 
     let exportRequestId = 0;
     let exportFilterTimer;
-    state.exportData = { orders: [], daily: [], summary: null };
+    state.exportData = { orders: [], daily: [], summary: null, expenses: [], expensesByDate: new Map() };
 
     async function loadExportPage() {
         const startEl = document.getElementById('exportStartDate');
@@ -1052,24 +1052,28 @@
 
         // Disable tombol export selagi loading
         ['btnExportExcel', 'btnExportCSV', 'btnExportPrint'].forEach(id => { const b = document.getElementById(id); if (b) b.disabled = true; });
-        document.getElementById('exportDailyBody').innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px">Memuat data...</td></tr>';
+        document.getElementById('exportDailyBody').innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px">Memuat data...</td></tr>';
         document.getElementById('exportDetailBody').innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px">Memuat data...</td></tr>';
+        document.getElementById('exportExpenseBody').innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px">Memuat data...</td></tr>';
 
         try {
-            const orders = await fetchOrders(
-                dayStartISO(start),
-                dayEndExclusiveISO(end),
-                { statuses: PAID_STATUS, cols: 'id,order_number,total,payment_method,created_at,customer_name,order_type', limit: 2000 }
-            );
+            const rangeStart = dayStartISO(start);
+            const rangeEnd = dayEndExclusiveISO(end);
+            const [orders, expensesResult] = await Promise.all([
+                fetchOrders(rangeStart, rangeEnd, { statuses: PAID_STATUS, cols: 'id,order_number,total,payment_method,created_at,customer_name,order_type', limit: 2000 }),
+                supabase.from('expenses').select('id,amount,category,description,created_at,cash_sources(name)').gte('created_at', rangeStart).lt('created_at', rangeEnd).order('created_at', { ascending: false })
+            ]);
             if (requestId !== exportRequestId) return;
+            if (expensesResult.error) throw expensesResult.error;
+            const expenses = expensesResult.data || [];
 
-            // Group by tanggal (Jakarta)
+            // Group orders by tanggal (Jakarta)
             const byDate = new Map();
             let totalRev = 0, totalCash = 0, totalQris = 0, totalDebit = 0;
             orders.forEach(o => {
                 const t = Number(o.total || 0);
                 const key = new Date(o.created_at).toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta' });
-                const r = byDate.get(key) || { n: 0, cash: 0, qris: 0, debit: 0, total: 0, ts: new Date(o.created_at).getTime() };
+                const r = byDate.get(key) || { n: 0, cash: 0, qris: 0, debit: 0, total: 0, expense: 0, ts: new Date(o.created_at).getTime() };
                 r.n++; r.total += t; totalRev += t;
                 if (['cash', 'qris', 'debit'].includes(o.payment_method)) r[o.payment_method] += t;
                 if (o.payment_method === 'cash') totalCash += t;
@@ -1078,8 +1082,26 @@
                 byDate.set(key, r);
             });
 
+            // Group expenses by tanggal (Jakarta) & hitung total
+            const expensesByDate = new Map();
+            let totalExpense = 0;
+            expenses.forEach(e => {
+                const amt = Number(e.amount || 0);
+                totalExpense += amt;
+                const key = new Date(e.created_at).toLocaleDateString('id-ID', { timeZone: 'Asia/Jakarta' });
+                expensesByDate.set(key, (expensesByDate.get(key) || 0) + amt);
+                // Gabungkan ke byDate untuk baris yang sudah ada, atau buat baru
+                const r = byDate.get(key) || { n: 0, cash: 0, qris: 0, debit: 0, total: 0, expense: 0, ts: new Date(e.created_at).getTime() };
+                r.expense += amt;
+                byDate.set(key, r);
+            });
+
             const dailyArr = [...byDate.entries()].sort((a, b) => b[1].ts - a[1].ts);
-            state.exportData = { orders, daily: dailyArr, summary: { total: totalRev, cash: totalCash, qris: totalQris, debit: totalDebit, count: orders.length, days: dailyArr.length } };
+            const cashReal = totalCash - totalExpense;
+            state.exportData = {
+                orders, daily: dailyArr, expenses,
+                summary: { total: totalRev, cash: totalCash, qris: totalQris, debit: totalDebit, count: orders.length, days: dailyArr.length, expense: totalExpense, cashReal }
+            };
 
             // Stats card
             document.getElementById('expStatOrders').innerText = orders.length;
@@ -1087,46 +1109,61 @@
             document.getElementById('expStatCash').innerText = formatRp(totalCash);
             document.getElementById('expStatQris').innerText = formatRp(totalQris);
             document.getElementById('expStatDebit').innerText = formatRp(totalDebit);
+            document.getElementById('expStatExpense').innerText = formatRp(totalExpense);
+            const cashRealEl = document.getElementById('expStatCashReal');
+            cashRealEl.innerText = formatRp(cashReal);
+            cashRealEl.style.color = cashReal >= 0 ? 'var(--primary-dark)' : '#ef4444';
             document.getElementById('expStatDays').innerText = dailyArr.length;
 
-            // Daily table
+            // Daily table (dengan kolom Pengeluaran & Cash Real)
             document.getElementById('exportDailyBody').innerHTML = dailyArr.length
-                ? dailyArr.map(([d, r]) => `<tr><td><b>${escapeHtml(d)}</b></td><td>${r.n}</td><td>${formatRp(r.cash)}</td><td>${formatRp(r.qris)}</td><td>${formatRp(r.debit)}</td><td><b>${formatRp(r.total)}</b></td></tr>`).join('')
-                    + `<tr style="background:var(--primary-50);font-weight:800"><td>TOTAL</td><td>${orders.length}</td><td>${formatRp(totalCash)}</td><td>${formatRp(totalQris)}</td><td>${formatRp(totalDebit)}</td><td>${formatRp(totalRev)}</td></tr>`
-                : '<tr><td colspan="6" style="text-align:center;padding:30px;color:var(--text-light)">Tidak ada transaksi pada rentang tanggal ini</td></tr>';
+                ? dailyArr.map(([d, r]) => {
+                    const real = r.cash - r.expense;
+                    return `<tr><td><b>${escapeHtml(d)}</b></td><td>${r.n}</td><td>${formatRp(r.cash)}</td><td>${formatRp(r.qris)}</td><td>${formatRp(r.debit)}</td><td><b>${formatRp(r.total)}</b></td><td style="color:#ef4444">${formatRp(r.expense)}</td><td style="font-weight:800;color:${real >= 0 ? 'var(--primary-dark)' : '#ef4444'}">${formatRp(real)}</td></tr>`;
+                }).join('')
+                    + `<tr style="background:var(--primary-50);font-weight:800"><td>TOTAL</td><td>${orders.length}</td><td>${formatRp(totalCash)}</td><td>${formatRp(totalQris)}</td><td>${formatRp(totalDebit)}</td><td>${formatRp(totalRev)}</td><td style="color:#ef4444">${formatRp(totalExpense)}</td><td style="color:${cashReal >= 0 ? 'var(--primary-dark)' : '#ef4444'}">${formatRp(cashReal)}</td></tr>`
+                : '<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--text-light)">Tidak ada transaksi pada rentang tanggal ini</td></tr>';
 
-            // Detail table
+            // Detail transaksi penjualan
             document.getElementById('exportDetailBody').innerHTML = orders.length
                 ? orders.map(o => {
                     const menus = (o.order_items || []).map(i => `${escapeHtml(i.products?.name || 'Produk')} × ${Number(i.qty || 0)}`).join(', ') || '-';
                     const methodBadge = o.payment_method === 'cash' ? 'success' : o.payment_method === 'qris' ? 'info' : 'warning';
                     return `<tr><td>${new Date(o.created_at).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', dateStyle: 'short', timeStyle: 'short' })}</td><td><b>${escapeHtml(o.order_number || '-')}</b></td><td><span class="badge badge-info">${escapeHtml(o.order_type || '-')}</span></td><td>${escapeHtml(o.customer_name || 'Walk-in')}</td><td>${menus}</td><td><span class="badge badge-${methodBadge}">${escapeHtml((o.payment_method || '-').toUpperCase())}</span></td><td><b>${formatRp(Number(o.total || 0))}</b></td></tr>`;
                 }).join('')
-                : '<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--text-light)">Tidak ada transaksi pada rentang tanggal ini</td></tr>';
+                : '<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--text-light)">Tidak ada transaksi penjualan pada rentang tanggal ini</td></tr>';
 
-            // Enable tombol export jika ada data
-            if (orders.length > 0) {
+            // Detail pengeluaran
+            document.getElementById('exportExpenseBody').innerHTML = expenses.length
+                ? expenses.map(e => `<tr><td>${new Date(e.created_at).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', dateStyle: 'short', timeStyle: 'short' })}</td><td><b>${escapeHtml(e.category || '-')}</b></td><td>${escapeHtml(e.description || '-')}</td><td><span class="badge badge-warning">${escapeHtml(e.cash_sources?.name || '-')}</span></td><td style="color:#ef4444;font-weight:800">-${formatRp(Number(e.amount || 0))}</td></tr>`).join('')
+                    + `<tr style="background:#fef2f2;font-weight:800"><td colspan="4">TOTAL PENGELUARAN</td><td style="color:#ef4444">-${formatRp(totalExpense)}</td></tr>`
+                : '<tr><td colspan="5" style="text-align:center;padding:30px;color:var(--text-light)">Tidak ada pengeluaran pada rentang tanggal ini</td></tr>';
+
+            // Enable tombol export jika ada data (orders ATAU expenses)
+            if (orders.length > 0 || expenses.length > 0) {
                 ['btnExportExcel', 'btnExportCSV', 'btnExportPrint'].forEach(id => { const b = document.getElementById(id); if (b) b.disabled = false; });
             }
         } catch (error) {
             console.error(error);
             showToast('Gagal memuat data export: ' + error.message, true);
-            document.getElementById('exportDailyBody').innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:#ef4444">Gagal memuat data</td></tr>';
+            document.getElementById('exportDailyBody').innerHTML = '<tr><td colspan="8" style="text-align:center;padding:24px;color:#ef4444">Gagal memuat data</td></tr>';
             document.getElementById('exportDetailBody').innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:#ef4444">Gagal memuat data</td></tr>';
+            document.getElementById('exportExpenseBody').innerHTML = '<tr><td colspan="5" style="text-align:center;padding:24px;color:#ef4444">Gagal memuat data</td></tr>';
         }
     };
 
-    // Export ke Excel (.xlsx) - 2 sheet: Ringkasan & Detail
+    // Export ke Excel (.xlsx) - 3 sheet: Ringkasan, Detail Transaksi, Detail Pengeluaran
     window.exportToExcel = function () {
-        if (!state.exportData.orders.length) { showToast('Tidak ada data untuk diexport. Klik Load Data dulu.', true); return; }
+        if (!state.exportData.orders.length && !state.exportData.expenses.length) { showToast('Tidak ada data untuk diexport. Klik Load Data dulu.', true); return; }
         if (typeof XLSX === 'undefined') { showToast('Library Excel (SheetJS) belum termuat. Cek koneksi internet.', true); return; }
 
         const start = document.getElementById('exportStartDate').value;
         const end = document.getElementById('exportEndDate').value;
         const periodLabel = start === end ? start : `${start} s/d ${end}`;
         const storeName = 'MASUSPACE Coffee';
+        const s = state.exportData.summary;
 
-        // Sheet 1: Ringkasan per Tanggal
+        // Sheet 1: Ringkasan per Tanggal (dengan Pengeluaran & Cash Real)
         const summaryData = [
             ['LAPORAN PENJUALAN - ' + storeName],
             ['Periode', periodLabel],
@@ -1134,21 +1171,26 @@
             ['Oleh', state.currentUser?.full_name || '-'],
             [],
             ['RINGKASAN PER TANGGAL'],
-            ['Tanggal', 'Jumlah Order', 'Cash (Rp)', 'QRIS (Rp)', 'Debit (Rp)', 'Total Penjualan (Rp)']
+            ['Tanggal', 'Jumlah Order', 'Cash (Rp)', 'QRIS (Rp)', 'Debit (Rp)', 'Total Penjualan (Rp)', 'Pengeluaran (Rp)', 'Cash Real (Rp)']
         ];
         state.exportData.daily.forEach(([d, r]) => {
-            summaryData.push([d, r.n, r.cash, r.qris, r.debit, r.total]);
+            const real = r.cash - r.expense;
+            summaryData.push([d, r.n, r.cash, r.qris, r.debit, r.total, -r.expense, real]);
         });
-        const s = state.exportData.summary;
-        summaryData.push(['TOTAL', s.count, s.cash, s.qris, s.debit, s.total]);
+        summaryData.push(['TOTAL', s.count, s.cash, s.qris, s.debit, s.total, -s.expense, s.cashReal]);
         summaryData.push([]);
         summaryData.push(['RINGKASAN METODE PEMBAYARAN']);
         summaryData.push(['Metode', 'Jumlah Transaksi', 'Total (Rp)']);
         summaryData.push(['Cash', state.exportData.orders.filter(o => o.payment_method === 'cash').length, s.cash]);
         summaryData.push(['QRIS', state.exportData.orders.filter(o => o.payment_method === 'qris').length, s.qris]);
         summaryData.push(['Debit', state.exportData.orders.filter(o => o.payment_method === 'debit').length, s.debit]);
+        summaryData.push([]);
+        summaryData.push(['RINGKASAN CASH REAL']);
+        summaryData.push(['Cash Sales (Rp)', s.cash]);
+        summaryData.push(['Total Pengeluaran (Rp)', -s.expense]);
+        summaryData.push(['Cash Real (Rp)', s.cashReal]);
 
-        // Sheet 2: Detail Transaksi
+        // Sheet 2: Detail Transaksi Penjualan
         const detailData = [
             ['No', 'Tanggal & Waktu', 'No. Order', 'Tipe Order', 'Customer', 'Daftar Menu', 'Metode Bayar', 'Total (Rp)']
         ];
@@ -1168,30 +1210,64 @@
         detailData.push([]);
         detailData.push(['', '', '', '', '', '', 'TOTAL', s.total]);
 
+        // Sheet 3: Detail Pengeluaran
+        const expenseData = [
+            ['No', 'Tanggal & Waktu', 'Kategori', 'Deskripsi', 'Sumber Kas', 'Jumlah (Rp)']
+        ];
+        state.exportData.expenses.forEach((e, idx) => {
+            expenseData.push([
+                idx + 1,
+                new Date(e.created_at).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' }),
+                e.category || '-',
+                e.description || '-',
+                e.cash_sources?.name || '-',
+                -Number(e.amount || 0)
+            ]);
+        });
+        expenseData.push([]);
+        expenseData.push(['', '', '', '', 'TOTAL PENGELUARAN', -s.expense]);
+
         const wb = XLSX.utils.book_new();
         const ws1 = XLSX.utils.aoa_to_sheet(summaryData);
         const ws2 = XLSX.utils.aoa_to_sheet(detailData);
+        const ws3 = XLSX.utils.aoa_to_sheet(expenseData);
 
         // Set lebar kolom
-        ws1['!cols'] = [{ wch: 22 }, { wch: 14 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 20 }];
-        ws2['!cols'] = [{ wch: 5 }, { wch: 22 }, { wch: 16 }, { wch: 12 }, { wch: 16 }, { wch: 50 }, { wch: 14 }, { wch: 16 }];
+        ws1['!cols'] = [{ wch: 22 }, { wch: 14 }, { wch: 16 }, { wch: 16 }, { wch: 16 }, { wch: 20 }, { wch: 16 }, { wch: 16 }];
+        ws2['!cols'] = [{ wch: 5 }, { wch: 22 }, { wch: 18 }, { wch: 12 }, { wch: 16 }, { wch: 50 }, { wch: 14 }, { wch: 16 }];
+        ws3['!cols'] = [{ wch: 5 }, { wch: 22 }, { wch: 18 }, { wch: 30 }, { wch: 16 }, { wch: 16 }];
 
         XLSX.utils.book_append_sheet(wb, ws1, 'Ringkasan');
-        XLSX.utils.book_append_sheet(wb, ws2, 'Detail Transaksi');
+        XLSX.utils.book_append_sheet(wb, ws2, 'Detail Penjualan');
+        XLSX.utils.book_append_sheet(wb, ws3, 'Detail Pengeluaran');
 
         const filename = `Export_Transaksi_${start}_sd_${end}.xlsx`;
         XLSX.writeFile(wb, filename);
         showToast('Excel berhasil diexport: ' + filename);
     };
 
-    // Export ke CSV (data mentah detail transaksi)
+    // Export ke CSV (data mentah: penjualan + pengeluaran + ringkasan)
     window.exportToCSV = function () {
-        if (!state.exportData.orders.length) { showToast('Tidak ada data untuk diexport. Klik Load Data dulu.', true); return; }
+        if (!state.exportData.orders.length && !state.exportData.expenses.length) { showToast('Tidak ada data untuk diexport. Klik Load Data dulu.', true); return; }
         const start = document.getElementById('exportStartDate').value;
         const end = document.getElementById('exportEndDate').value;
+        const s = state.exportData.summary;
 
-        const headers = ['Tanggal & Waktu', 'No. Order', 'Tipe Order', 'Customer', 'Daftar Menu', 'Metode Bayar', 'Total (Rp)'];
-        const rows = [headers];
+        const rows = [];
+        rows.push(['LAPORAN PENJUALAN MASUSPACE COFFEE']);
+        rows.push(['Periode', start === end ? start : `${start} s/d ${end}`]);
+        rows.push(['Diexport', new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' }) + ' WIB']);
+        rows.push([]);
+        rows.push(['== RINGKASAN PER TANGGAL ==']);
+        rows.push(['Tanggal', 'Jumlah Order', 'Cash (Rp)', 'QRIS (Rp)', 'Debit (Rp)', 'Total Penjualan (Rp)', 'Pengeluaran (Rp)', 'Cash Real (Rp)']);
+        state.exportData.daily.forEach(([d, r]) => {
+            const real = r.cash - r.expense;
+            rows.push([d, r.n, r.cash, r.qris, r.debit, r.total, -r.expense, real]);
+        });
+        rows.push(['TOTAL', s.count, s.cash, s.qris, s.debit, s.total, -s.expense, s.cashReal]);
+        rows.push([]);
+        rows.push(['== DETAIL TRANSAKSI PENJUALAN ==']);
+        rows.push(['Tanggal & Waktu', 'No. Order', 'Tipe Order', 'Customer', 'Daftar Menu', 'Metode Bayar', 'Total (Rp)']);
         state.exportData.orders.forEach(o => {
             const menus = (o.order_items || []).map(i => `${i.products?.name || 'Produk'} x${Number(i.qty || 0)}`).join('; ') || '-';
             rows.push([
@@ -1204,10 +1280,20 @@
                 Number(o.total || 0)
             ]);
         });
-
-        // Tambahkan baris total
+        rows.push(['', '', '', '', '', 'TOTAL', s.total]);
         rows.push([]);
-        rows.push(['', '', '', '', '', 'TOTAL', state.exportData.summary.total]);
+        rows.push(['== DETAIL PENGELUARAN ==']);
+        rows.push(['Tanggal & Waktu', 'Kategori', 'Deskripsi', 'Sumber Kas', 'Jumlah (Rp)']);
+        state.exportData.expenses.forEach(e => {
+            rows.push([
+                new Date(e.created_at).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' }),
+                e.category || '-',
+                e.description || '-',
+                e.cash_sources?.name || '-',
+                -Number(e.amount || 0)
+            ]);
+        });
+        rows.push(['', '', '', 'TOTAL PENGELUARAN', -s.expense]);
 
         // Convert ke CSV dengan escape quote
         const csv = rows.map(r => r.map(c => {
@@ -1228,13 +1314,14 @@
         showToast('CSV berhasil diexport.');
     };
 
-    // Print laporan transaksi
+    // Print laporan transaksi (penjualan + pengeluaran + cash real)
     window.printExportReport = function () {
-        if (!state.exportData.orders.length) { showToast('Tidak ada data untuk dicetak. Klik Load Data dulu.', true); return; }
+        if (!state.exportData.orders.length && !state.exportData.expenses.length) { showToast('Tidak ada data untuk dicetak. Klik Load Data dulu.', true); return; }
         const start = document.getElementById('exportStartDate').value;
         const end = document.getElementById('exportEndDate').value;
         const periodLabel = start === end ? start : `${start} s/d ${end}`;
         const s = state.exportData.summary;
+        const cashRealColor = s.cashReal >= 0 ? '#059669' : '#ef4444';
 
         const html = `
 <!DOCTYPE html><html lang="id"><head><meta charset="UTF-8"><title>Laporan Penjualan ${periodLabel}</title>
@@ -1242,11 +1329,16 @@
 body{font-family:'Plus Jakarta Sans',Arial,sans-serif;padding:20px;color:#0f172a;font-size:12px}
 h1{text-align:center;font-size:20px;margin-bottom:4px}
 h2{font-size:14px;margin:18px 0 8px;border-bottom:2px solid #10b981;padding-bottom:4px}
+h2.expense{border-bottom-color:#ef4444}
 .sub{text-align:center;color:#64748b;margin-bottom:18px;font-size:12px}
 table{width:100%;border-collapse:collapse;margin-bottom:12px}
 th,td{border:1px solid #e2e8f0;padding:6px 8px;text-align:left;font-size:11px}
 th{background:#ecfdf5;font-weight:700;text-transform:uppercase;font-size:10px;color:#059669}
+th.expense-h{background:#fef2f2;color:#ef4444}
 tr.total{font-weight:800;background:#d1fae5}
+tr.total-expense{font-weight:800;background:#fee2e2}
+td.neg{color:#ef4444}
+td.cashreal{font-weight:800}
 .summary{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:14px 0}
 .summary div{padding:10px;border:1px solid #e2e8f0;border-radius:8px;background:#f8fafc}
 .summary .lbl{font-size:10px;color:#64748b;text-transform:uppercase;font-weight:600}
@@ -1254,24 +1346,36 @@ tr.total{font-weight:800;background:#d1fae5}
 .foot{margin-top:24px;text-align:center;font-size:10px;color:#94a3b8}
 @media print{body{padding:0}}</style></head><body>
 <h1>MASUSPACE COFFEE</h1>
-<p class="sub">Laporan Transaksi Penjualan<br>Periode: ${periodLabel}<br>Diexport: ${new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })} WIB • Oleh: ${escapeHtml(state.currentUser?.full_name || '-')}</p>
+<p class="sub">Laporan Transaksi Penjualan + Pengeluaran<br>Periode: ${periodLabel}<br>Diexport: ${new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })} WIB • Oleh: ${escapeHtml(state.currentUser?.full_name || '-')}</p>
 <div class="summary">
 <div><div class="lbl">Total Order</div><div class="val">${s.count}</div></div>
 <div><div class="lbl">Total Penjualan</div><div class="val">Rp ${s.total.toLocaleString('id-ID')}</div></div>
-<div><div class="lbl">Cash</div><div class="val">Rp ${s.cash.toLocaleString('id-ID')}</div></div>
+<div><div class="lbl">Cash Sales</div><div class="val">Rp ${s.cash.toLocaleString('id-ID')}</div></div>
 <div><div class="lbl">QRIS + Debit</div><div class="val">Rp ${(s.qris + s.debit).toLocaleString('id-ID')}</div></div>
+<div><div class="lbl">Total Pengeluaran</div><div class="val" style="color:#ef4444">Rp ${s.expense.toLocaleString('id-ID')}</div></div>
+<div><div class="lbl">Cash Real</div><div class="val" style="color:${cashRealColor}">Rp ${s.cashReal.toLocaleString('id-ID')}</div></div>
+<div><div class="lbl">Hari Aktif</div><div class="val">${s.days}</div></div>
+<div><div class="lbl">Formula</div><div class="val" style="font-size:11px">Cash Real = Cash − Pengeluaran</div></div>
 </div>
 <h2>Ringkasan per Tanggal</h2>
-<table><thead><tr><th>Tanggal</th><th>Order</th><th>Cash</th><th>QRIS</th><th>Debit</th><th>Total</th></tr></thead><tbody>
-${state.exportData.daily.map(([d, r]) => `<tr><td>${escapeHtml(d)}</td><td>${r.n}</td><td>Rp ${r.cash.toLocaleString('id-ID')}</td><td>Rp ${r.qris.toLocaleString('id-ID')}</td><td>Rp ${r.debit.toLocaleString('id-ID')}</td><td><b>Rp ${r.total.toLocaleString('id-ID')}</b></td></tr>`).join('')}
-<tr class="total"><td>TOTAL</td><td>${s.count}</td><td>Rp ${s.cash.toLocaleString('id-ID')}</td><td>Rp ${s.qris.toLocaleString('id-ID')}</td><td>Rp ${s.debit.toLocaleString('id-ID')}</td><td>Rp ${s.total.toLocaleString('id-ID')}</td></tr>
+<table><thead><tr><th>Tanggal</th><th>Order</th><th>Cash</th><th>QRIS</th><th>Debit</th><th>Penjualan</th><th>Pengeluaran</th><th>Cash Real</th></tr></thead><tbody>
+${state.exportData.daily.map(([d, r]) => {
+    const real = r.cash - r.expense;
+    return `<tr><td>${escapeHtml(d)}</td><td>${r.n}</td><td>Rp ${r.cash.toLocaleString('id-ID')}</td><td>Rp ${r.qris.toLocaleString('id-ID')}</td><td>Rp ${r.debit.toLocaleString('id-ID')}</td><td><b>Rp ${r.total.toLocaleString('id-ID')}</b></td><td class="neg">Rp ${r.expense.toLocaleString('id-ID')}</td><td class="cashreal" style="color:${real >= 0 ? '#059669' : '#ef4444'}">Rp ${real.toLocaleString('id-ID')}</td></tr>`;
+}).join('')}
+<tr class="total"><td>TOTAL</td><td>${s.count}</td><td>Rp ${s.cash.toLocaleString('id-ID')}</td><td>Rp ${s.qris.toLocaleString('id-ID')}</td><td>Rp ${s.debit.toLocaleString('id-ID')}</td><td>Rp ${s.total.toLocaleString('id-ID')}</td><td class="neg">Rp ${s.expense.toLocaleString('id-ID')}</td><td class="cashreal" style="color:${cashRealColor}">Rp ${s.cashReal.toLocaleString('id-ID')}</td></tr>
 </tbody></table>
-<h2>Detail Transaksi</h2>
+<h2>Detail Transaksi Penjualan</h2>
 <table><thead><tr><th>No</th><th>Waktu</th><th>No. Order</th><th>Tipe</th><th>Customer</th><th>Menu</th><th>Metode</th><th>Total</th></tr></thead><tbody>
 ${state.exportData.orders.map((o, i) => {
     const menus = (o.order_items || []).map(it => `${escapeHtml(it.products?.name || 'Produk')} x${Number(it.qty || 0)}`).join(', ') || '-';
     return `<tr><td>${i + 1}</td><td>${new Date(o.created_at).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', dateStyle: 'short', timeStyle: 'short' })}</td><td>${escapeHtml(o.order_number || '-')}</td><td>${escapeHtml(o.order_type || '-')}</td><td>${escapeHtml(o.customer_name || 'Walk-in')}</td><td>${menus}</td><td>${(o.payment_method || '-').toUpperCase()}</td><td><b>Rp ${Number(o.total || 0).toLocaleString('id-ID')}</b></td></tr>`;
 }).join('')}
+</tbody></table>
+<h2 class="expense">Detail Pengeluaran</h2>
+<table><thead><tr class="expense-h"><th>Waktu</th><th>Kategori</th><th>Deskripsi</th><th>Sumber Kas</th><th>Jumlah</th></tr></thead><tbody>
+${state.exportData.expenses.map(e => `<tr><td>${new Date(e.created_at).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', dateStyle: 'short', timeStyle: 'short' })}</td><td><b>${escapeHtml(e.category || '-')}</b></td><td>${escapeHtml(e.description || '-')}</td><td>${escapeHtml(e.cash_sources?.name || '-')}</td><td class="neg"><b>-Rp ${Number(e.amount || 0).toLocaleString('id-ID')}</b></td></tr>`).join('')}
+<tr class="total-expense"><td colspan="4">TOTAL PENGELUARAN</td><td class="neg">-Rp ${s.expense.toLocaleString('id-ID')}</td></tr>
 </tbody></table>
 <p class="foot">Laporan ini dibuat otomatis oleh MasuSpace POS — ${new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })}</p>
 </body></html>`;
