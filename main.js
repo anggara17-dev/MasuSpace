@@ -2075,9 +2075,23 @@ ${state.exportData.expenses.map(e => `<tr><td>${new Date(e.created_at).toLocaleS
     window.connectBluetoothPrinter = async function () {
         if (!navigator.bluetooth) { showToast('Browser tidak mendukung Web Bluetooth. Gunakan Chrome/Edge via HTTPS.', true); return; }
         try {
+            // UUID thermal printer BLE yang umum (Rongta, Xprinter, Goojprt, Epson, Bixolon, dll)
+            // Wajib pakai UUID full — nama alias 'printer' TIDAK valid di Web Bluetooth.
+            const optionalServices = [
+                '000018f0-0000-1000-8000-00805f9b34fb', // Printer service umum
+                '000018f1-0000-1000-8000-00805f9b34fb', // Printer service varian
+                '0000ff00-0000-1000-8000-00805f9b34fb', // Custom printer (umum di printer China)
+                '0000ffe0-0000-1000-8000-00805f9b34fb', // SPP-over-BLE (TI cc254x)
+                '0000ffe1-0000-1000-8000-00805f9b34fb', // SPP-over-BLE characteristic
+                '49535343-fe7d-4ae5-8fa9-9fafd205e455', // TI UART service
+                'e7810a71-73ae-499d-8c15-faa5a80f03de', // Nordic UART service (NUART)
+                '00001800-0000-1000-8000-00805f9b34fb', // generic_access
+                '0000180a-0000-1000-8000-00805f9b34fb', // device_information
+                '0000180f-0000-1000-8000-00805f9b34fb'  // battery_service
+            ];
             const device = await navigator.bluetooth.requestDevice({
                 acceptAllDevices: true,
-                optionalServices: ['printer', 'device_information', 'generic_access', '000018f0-0000-1000-8000-00805f9b34fb'] // 18f0 = printer umum
+                optionalServices
             });
             await device.gatt.connect();
             attachBluetoothReconnectHandler(device);
