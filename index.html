@@ -6,6 +6,7 @@
     <title>MasuSpace POS</title>
     <link rel="stylesheet" href="style.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 </head>
@@ -23,6 +24,7 @@
                     <div class="feature-item"><i class="fas fa-chart-line"></i><span>Laporan & Analitik</span></div>
                     <div class="feature-item"><i class="fas fa-receipt"></i><span>Riwayat Order</span></div>
                     <div class="feature-item"><i class="fas fa-money-bill-transfer"></i><span>Pengeluaran Kasir</span></div>
+                    <div class="feature-item"><i class="fas fa-file-export"></i><span>Export Transaksi</span></div>
                     <div class="feature-item"><i class="fas fa-mobile-screen-button"></i><span>Ramah Mobile</span></div>
                 </div>
                 <div class="login-footer-left">MASUSPACE POS</div>
@@ -54,6 +56,7 @@
                 <button class="nav-item owner-only" data-page="menu" onclick="window.navigate('menu')"><i class="fas fa-utensils"></i><span>Menu & Stok</span></button>
                 <button class="nav-item owner-only" data-page="cash" onclick="window.navigate('cash')"><i class="fas fa-vault"></i><span>Kas & Bank</span></button>
                 <button class="nav-item owner-only" data-page="reports" onclick="window.navigate('reports')"><i class="fas fa-chart-column"></i><span>Laporan</span></button>
+                <button class="nav-item owner-only" data-page="export" onclick="window.navigate('export')"><i class="fas fa-file-export"></i><span>Export Transaksi</span></button>
                 <button class="nav-item owner-only" data-page="settings" onclick="window.navigate('settings')"><i class="fas fa-gear"></i><span>Pengaturan</span></button>
             </nav>
         </aside>
@@ -174,6 +177,69 @@
                     <div class="page-header"><h2>Laporan</h2><div class="filter-group"><div class="date-range-filter"><i class="fas fa-calendar-days"></i><input type="date" id="reportStartDate"><span>s/d</span><input type="date" id="reportEndDate"></div><button class="btn-secondary" onclick="window.setReportPreset('today')">Hari Ini</button><button class="btn-secondary" onclick="window.setReportPreset('week')">7 Hari</button><button class="btn-secondary" onclick="window.setReportPreset('month')">Bulan</button></div></div>
                     <div class="stats-grid compact" id="reportStats"></div>
                     <div class="table-container"><table class="data-table"><thead><tr><th>Tanggal</th><th>Order</th><th>Cash</th><th>QRIS</th><th>Debit</th><th>Total</th></tr></thead><tbody id="reportTableBody"></tbody></table></div>
+                </div>
+
+                <!-- EXPORT TRANSAKSI -->
+                <div id="page-export" class="page">
+                    <div class="page-header">
+                        <h2>Export Transaksi Penjualan</h2>
+                        <div class="filter-group">
+                            <div class="date-range-filter"><i class="fas fa-calendar-days"></i><input type="date" id="exportStartDate"><span>s/d</span><input type="date" id="exportEndDate"></div>
+                            <button class="btn-secondary" onclick="window.setExportPreset('today')">Hari Ini</button>
+                            <button class="btn-secondary" onclick="window.setExportPreset('week')">7 Hari</button>
+                            <button class="btn-secondary" onclick="window.setExportPreset('month')">Bulan Ini</button>
+                        </div>
+                    </div>
+
+                    <div class="export-info-card">
+                        <div style="display:flex;align-items:start;gap:10px">
+                            <i class="fas fa-circle-info" style="color:var(--primary);font-size:18px;margin-top:2px"></i>
+                            <div>
+                                <p style="font-weight:700;margin-bottom:4px">Export transaksi penjualan per tanggal</p>
+                                <p style="font-size:12px;color:var(--text-light);line-height:1.5">Pilih rentang tanggal, klik <b>Load Data</b> untuk melihat transaksi, lalu pilih format export: <b>Excel (.xlsx)</b> berisi sheet ringkasan harian + detail transaksi, atau <b>CSV</b> untuk data mentah, atau <b>Print</b> untuk mencetak laporan.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="export-actions-bar">
+                        <button class="btn-primary" onclick="window.loadExportData()"><i class="fas fa-rotate"></i> Load Data</button>
+                        <button class="btn-secondary" onclick="window.exportToExcel()" id="btnExportExcel" disabled><i class="fas fa-file-excel"></i> Export Excel</button>
+                        <button class="btn-secondary" onclick="window.exportToCSV()" id="btnExportCSV" disabled><i class="fas fa-file-csv"></i> Export CSV</button>
+                        <button class="btn-secondary" onclick="window.printExportReport()" id="btnExportPrint" disabled><i class="fas fa-print"></i> Print</button>
+                    </div>
+
+                    <div class="stats-grid compact" id="exportStats">
+                        <div class="stat-card"><div class="stat-icon"><i class="fas fa-shopping-bag"></i></div><div class="stat-info"><div class="stat-label">Total Order</div><div class="stat-value" id="expStatOrders">0</div></div></div>
+                        <div class="stat-card"><div class="stat-icon"><i class="fas fa-money-bill-wave"></i></div><div class="stat-info"><div class="stat-label">Total Penjualan</div><div class="stat-value" id="expStatRevenue">Rp 0</div></div></div>
+                        <div class="stat-card"><div class="stat-icon"><i class="fas fa-money-bill"></i></div><div class="stat-info"><div class="stat-label">Cash</div><div class="stat-value" id="expStatCash">Rp 0</div></div></div>
+                        <div class="stat-card"><div class="stat-icon"><i class="fas fa-qrcode"></i></div><div class="stat-info"><div class="stat-label">QRIS</div><div class="stat-value" id="expStatQris">Rp 0</div></div></div>
+                        <div class="stat-card"><div class="stat-icon"><i class="fas fa-credit-card"></i></div><div class="stat-info"><div class="stat-label">Debit</div><div class="stat-value" id="expStatDebit">Rp 0</div></div></div>
+                        <div class="stat-card"><div class="stat-icon"><i class="fas fa-calendar-day"></i></div><div class="stat-info"><div class="stat-label">Hari Aktif</div><div class="stat-value" id="expStatDays">0</div></div></div>
+                    </div>
+
+                    <div class="export-section">
+                        <h3><i class="fas fa-list-ol"></i> Ringkasan per Tanggal</h3>
+                        <div class="table-container">
+                            <table class="data-table">
+                                <thead><tr><th>Tanggal</th><th>Jumlah Order</th><th>Cash</th><th>QRIS</th><th>Debit</th><th>Total Penjualan</th></tr></thead>
+                                <tbody id="exportDailyBody">
+                                    <tr><td colspan="6" style="text-align:center;padding:30px;color:var(--text-light)">Klik "Load Data" untuk menampilkan transaksi</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="export-section">
+                        <h3><i class="fas fa-receipt"></i> Detail Transaksi</h3>
+                        <div class="table-container">
+                            <table class="data-table">
+                                <thead><tr><th>Tanggal & Waktu</th><th>No. Order</th><th>Tipe</th><th>Customer</th><th>Menu</th><th>Metode</th><th>Total</th></tr></thead>
+                                <tbody id="exportDetailBody">
+                                    <tr><td colspan="7" style="text-align:center;padding:30px;color:var(--text-light)">Klik "Load Data" untuk menampilkan transaksi</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- PENGATURAN -->
