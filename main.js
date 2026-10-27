@@ -18,8 +18,8 @@
     const OWNER_ONLY_PAGES = ['menu', 'categories', 'inventory', 'cash', 'reports', 'export', 'settings'];
     let state = {
         currentUser: null, authUserId: null, currentPage: 'dashboard',
-        cart: [], categories: [], products: [], variants: [], addons: [],
-        modalProduct: null, modalVariant: { suhu: 'Hot', ukuran: 'Regular' }, modalAddons: [], modalQty: 1,
+        cart: [], categories: [], products: [],
+        modalProduct: null, modalQty: 1,
         paymentMethod: 'cash', cashReceived: 0, discount: { type: 'percent', value: 0 },
         orderType: 'dine_in', currentReceipt: null, kasirExpenses: [], pendingPhotoBase64: null
     };
@@ -357,16 +357,12 @@
     /* ---------- Data kasir ---------- */
     async function loadKasirData() {
         if (state.categories.length === 0) {
-            const [cats, prods, vars, adds] = await Promise.all([
+            const [cats, prods] = await Promise.all([
                 supabase.from('categories').select('*').eq('is_active', true).order('display_order'),
-                supabase.from('products').select('*').eq('is_active', true).order('display_order'),
-                supabase.from('product_variants').select('*').eq('is_active', true),
-                supabase.from('addons').select('*').eq('is_active', true).order('display_order')
+                supabase.from('products').select('*').eq('is_active', true).order('display_order')
             ]);
             state.categories = cats.data || [];
             state.products = prods.data || [];
-            state.variants = vars.data || [];
-            state.addons = adds.data || [];
         }
         renderCategories();
         renderProducts();
@@ -474,39 +470,18 @@
 
     /* ---------- Modal produk ---------- */
     function modalUnitPrice() {
-        let price = Number(state.modalProduct.base_price);
-        if (state.modalVariant.suhu === 'Iced') price += 2000;
-        if (state.modalVariant.ukuran === 'Large') price += 5000;
-        state.modalAddons.forEach(id => { const a = state.addons.find(x => x.id === id); if (a) price += Number(a.price); });
-        return price;
+        return Number(state.modalProduct.base_price);
     }
     window.openModal = function (pid) {
         const p = state.products.find(x => x.id === pid);
         if (!p) return;
         state.modalProduct = p;
-        state.modalVariant = { suhu: 'Hot', ukuran: 'Regular' };
-        state.modalAddons = [];
         state.modalQty = 1;
         document.getElementById('modalProductName').innerText = p.name;
         document.getElementById('modalNotes').value = '';
         document.getElementById('modalQty').innerText = '1';
-        renderVariants(); renderAddons(); updateModalTotal();
-        document.getElementById('productModal').classList.add('active');
-    };
-    function renderVariants() {
-        const opt = (type, val, label) => `<div class="variant-option ${state.modalVariant[type] === val ? 'selected' : ''}" onclick="window.selVar('${type}','${val}')">${label}</div>`;
-        document.getElementById('suhuVariants').innerHTML = opt('suhu', 'Hot', '☕ Hot') + opt('suhu', 'Iced', '🧊 Iced (+2K)');
-        document.getElementById('ukuranVariants').innerHTML = opt('ukuran', 'Regular', 'Regular') + opt('ukuran', 'Large', 'Large (+5K)');
-    }
-    window.selVar = function (type, val) { state.modalVariant[type] = val; renderVariants(); updateModalTotal(); };
-    function renderAddons() {
-        document.getElementById('addonsList').innerHTML = state.addons.length
-            ? state.addons.map(a => `<div class="addon-item"><label><input type="checkbox" ${state.modalAddons.includes(a.id) ? 'checked' : ''} onchange="window.togAddon('${a.id}')"> ${escapeHtml(a.name)}</label><span style="font-weight:700;color:var(--primary-dark)">+${formatRp(a.price)}</span></div>`).join('')
-            : '<p style="font-size:12px;color:var(--text-light)">Tidak ada add-on</p>';
-    }
-    window.togAddon = function (id) {
-        state.modalAddons = state.modalAddons.includes(id) ? state.modalAddons.filter(x => x !== id) : [...state.modalAddons, id];
         updateModalTotal();
+        document.getElementById('productModal').classList.add('active');
     };
     window.changeQty = function (d) {
         state.modalQty = Math.max(1, state.modalQty + d);
@@ -528,12 +503,11 @@
     window.addToCart = function () {
         if (!state.modalProduct) return;
         const unitPrice = modalUnitPrice();
-        const addons = state.modalAddons.map(id => { const a = state.addons.find(x => x.id === id); return { id: a.id, name: a.name, price: a.price }; });
         const notes = document.getElementById('modalNotes').value.trim();
-        const key = [state.modalProduct.id, state.modalVariant.suhu, state.modalVariant.ukuran, JSON.stringify(addons), notes].join('|');
+        const key = [state.modalProduct.id, notes].join('|');
         const idx = state.cart.findIndex(i => i.key === key);
         if (idx >= 0) state.cart[idx].qty += state.modalQty;
-        else state.cart.push({ key, product_id: state.modalProduct.id, name: state.modalProduct.name, unit_price: unitPrice, qty: state.modalQty, variant_suhu: state.modalVariant.suhu, variant_ukuran: state.modalVariant.ukuran, addons, notes });
+        else state.cart.push({ key, product_id: state.modalProduct.id, name: state.modalProduct.name, unit_price: unitPrice, qty: state.modalQty, notes });
         window.closeModal('productModal');
         renderCart();
         showToast(`${state.modalProduct.name} ditambahkan!`);
@@ -546,7 +520,7 @@
         if (!state.cart.length) {
             box.innerHTML = '<div class="empty-order"><i class="fas fa-shopping-basket"></i><p>Belum ada item</p></div>';
         } else {
-            box.innerHTML = state.cart.map((item, idx) => `<div class="order-item"><div style="flex:1"><div style="font-weight:700">${escapeHtml(item.name)}</div><div style="font-size:11px;color:var(--text-light)">${escapeHtml(item.variant_suhu)}/${escapeHtml(item.variant_ukuran)} • ${formatRp(item.unit_price)}</div>${item.addons.length ? `<div style="font-size:10px;color:var(--primary)">+ ${item.addons.map(a => escapeHtml(a.name)).join(', ')}</div>` : ''}${item.notes ? `<div style="font-size:10px;color:var(--text-light)">📝 ${escapeHtml(item.notes)}</div>` : ''}<div class="item-qty"><button class="qty-btn" onclick="window.updateQty(${idx},-1)">-</button><span style="font-weight:700;min-width:20px;text-align:center">${item.qty}</span><button class="qty-btn" onclick="window.updateQty(${idx},1)">+</button><button class="qty-btn" onclick="window.removeFromCart(${idx})" style="color:#ef4444;border-color:#ef4444"><i class="fas fa-trash"></i></button></div></div><div style="font-weight:800;font-size:14px">${formatRp(item.unit_price * item.qty)}</div></div>`).join('');
+            box.innerHTML = state.cart.map((item, idx) => `<div class="order-item"><div style="flex:1"><div style="font-weight:700">${escapeHtml(item.name)}</div><div style="font-size:11px;color:var(--text-light)">${formatRp(item.unit_price)}</div>${item.notes ? `<div style="font-size:10px;color:var(--text-light)">📝 ${escapeHtml(item.notes)}</div>` : ''}<div class="item-qty"><button class="qty-btn" onclick="window.updateQty(${idx},-1)">-</button><span style="font-weight:700;min-width:20px;text-align:center">${item.qty}</span><button class="qty-btn" onclick="window.updateQty(${idx},1)">+</button><button class="qty-btn" onclick="window.removeFromCart(${idx})" style="color:#ef4444;border-color:#ef4444"><i class="fas fa-trash"></i></button></div></div><div style="font-weight:800;font-size:14px">${formatRp(item.unit_price * item.qty)}</div></div>`).join('');
         }
         updateTotals();
     }
@@ -622,8 +596,8 @@
                 p_table_number: document.getElementById('tableNumber').value.trim(),
                 p_order_type: state.orderType,
                 p_items: state.cart.map(i => ({
-                    product_id: i.product_id, variant_id: null, qty: i.qty, unit_price: i.unit_price, addons: i.addons,
-                    notes: [i.variant_suhu + '/' + i.variant_ukuran, i.notes].filter(Boolean).join(' • ')
+                    product_id: i.product_id, variant_id: null, qty: i.qty, unit_price: i.unit_price, addons: [],
+                    notes: i.notes || ''
                 })),
                 // diskon selalu dikirim sebagai nominal agar angka browser = server
                 p_discount_amount: discAmt, p_discount_percent: 0, p_tax_amount: 0,
@@ -665,7 +639,7 @@
         document.querySelector('#receiptModal h2').innerText = 'Struk';
         document.getElementById('receiptContent').innerHTML = receiptHtml({
             dateLabel: getJakartaDate(), number: r.order_number,
-            items: r.items.map(i => ({ name: i.name, qty: i.qty, unit_price: i.unit_price, detail: (i.variant_suhu || '') + '/' + (i.variant_ukuran || '') })),
+            items: r.items.map(i => ({ name: i.name, qty: i.qty, unit_price: i.unit_price, detail: i.notes || '' })),
             subtotal: r.subtotal, discount: r.discount, total: r.total, method: r.payment_method, paid: r.cash_received, change: r.change
         });
         document.getElementById('receiptModal').classList.add('active');
