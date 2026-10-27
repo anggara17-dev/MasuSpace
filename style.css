@@ -352,3 +352,61 @@ body.role-kasir .owner-only { display:none !important; }
 .login-logo-box { overflow:hidden; }
 .modal .password-wrapper input { padding-right:46px; }
 .order-action-btns button:disabled { opacity:.35; cursor:not-allowed; transform:none !important; box-shadow:none !important; }
+/* ===== EXPORT TRANSAKSI ===== */
+.export-info-card {
+    background: var(--primary-50);
+    border: 1px solid var(--primary);
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 16px;
+}
+.export-actions-bar {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+    padding: 12px 16px;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+}
+.export-actions-bar .btn-primary,
+.export-actions-bar .btn-secondary {
+    padding: 10px 18px;
+    font-size: 13px;
+}
+.export-section {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: 16px;
+}
+.export-section h3 {
+    font-size: 15px;
+    font-weight: 700;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text);
+}
+.export-section h3 i {
+    color: var(--primary);
+}
+.export-section .data-table th {
+    font-size: 11px;
+}
+.export-section .data-table td {
+    font-size: 12px;
+    white-space: normal;
+    word-break: break-word;
+}
+.export-print-area { display: none; }
+@media print {
+    body * { visibility: hidden !important; }
+    .export-print-area, .export-print-area * { visibility: visible !important; }
+    .export-print-area { display: block !important; position: absolute; left: 0; top: 0; width: 100%; padding: 20px; }
+    .modal-overlay { display: none !important; }
+    .sidebar, .app-header { display: none !important; }
+}
