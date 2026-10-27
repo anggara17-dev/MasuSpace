@@ -2318,8 +2318,8 @@ ${state.exportData.expenses.map(e => `<tr><td>${new Date(e.created_at).toLocaleS
         applyBrandLogo(localStorage.getItem('masuspace-logo'));
         loadUsersToDropdown();
         if (!RECOVERY_LINK) window.restoreOwnerSession();
-        // Auto-reconnect printer USB/Bluetooth yang sudah pernah disambung
-        setTimeout(reconnectPrinter, 800);
+        // Auto-reconnect kedua printer (bill & checker) yang sudah pernah disambung
+        setTimeout(reconnectAllPrinters, 800);
         // Hapus isian password otomatis dari browser (autofill muncul sedikit terlambat)
         [150, 600].forEach(ms => setTimeout(() => { const pw = document.getElementById('loginPassword'); if (pw && document.activeElement !== pw) pw.value = ''; }, ms));
         bindDateFilter(['dashboardStartDate', 'dashboardEndDate'], loadDashboard);
